@@ -131,8 +131,9 @@ async function catalog(session) {
 			buyable: true,
 		});
 	}
-	// Полезные товары (контейнер, ключи, инструменты) вперёд; легаси-купоны стикеров — в конец.
-	const rank = it => (it.name.toLowerCase().startsWith('coupon') ? 2 : (it.buyable ? 0 : 1));
+	// Порядок: контейнер, лицензия игры, пропуск Armory — первыми; дальше товары с иконками, без иконок — в конце.
+	const PINNED = [1201, 1353, 1354];
+	const rank = it => (PINNED.includes(it.def) ? PINNED.indexOf(it.def) : it.image ? 10 : 20);
 	items.sort((a, b) => rank(a) - rank(b) || a.price - b.price || a.name.localeCompare(b.name));
 	return { currency: ps.currency, balance: session.user.wallet.balance, items };
 }

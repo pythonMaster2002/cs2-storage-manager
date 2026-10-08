@@ -542,7 +542,7 @@ class CasketSession extends EventEmitter {
 
 	// Аналитика по аккаунту (как «Overview» в SkinLedger, но бесплатно): состав инвентаря и складов.
 	// Быстро — считаем по свободным предметам и сводке ящиков, содержимое ящиков НЕ читаем.
-	overview() {
+	async overview() {
 		this.ensureOnline();
 		const inv = this.csgo.inventory;
 		const caskets = inv.filter(i => i.def_index === CASKET);
@@ -555,11 +555,20 @@ class CasketSession extends EventEmitter {
 			byKind[k] = (byKind[k] || 0) + 1;
 			if (it.rarity) byRarity[it.rarity] = (byRarity[it.rarity] || 0) + 1;
 		}
+		const protectedMap = await this.protectedItems().catch(() => new Map());
+		const wallet = this.user.wallet || {};
 		return {
 			totalItems: loose.length + stored,
 			inventoryCount: loose.length, inventoryLimit: INVENTORY_LIMIT,
 			casketCount: caskets.length, stored, casketCapacity: caskets.length * CASKET_CAPACITY,
 			byRarity, byKind,
+			login: this.login, personaName: this.profile ? this.profile.name : null, avatar: this.profile ? this.profile.avatar : null,
+			wallet: wallet.hasWallet ? { balance: wallet.balance, currency: SteamUser.ECurrencyCode[wallet.currency] || String(wallet.currency) } : null,
+			protectedCount: loose.filter(i => protectedMap.has(String(i.id))).length,
+			tradeUpReady: loose.filter(isTradeUpInput).length,
+			caskets: caskets.map(c => ({ name: c.custom_name || null, count: c.casket_contained_item_count || 0, capacity: CASKET_CAPACITY }))
+				.sort((a, b) => b.count - a.count),
+			top: group(loose).slice(0, 10).map(g => ({ name: g.name, image: g.image, count: g.count })),
 		};
 	}
 

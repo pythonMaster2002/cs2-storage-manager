@@ -30,14 +30,14 @@ function applyStaticI18n() {
 function setLang(l) {
 	LANG = l;
 	try { localStorage.setItem('lang', l); } catch (e) { /* ignore */ }
-	[$('langSelect'), $('langSelect2')].forEach(sel => { if (sel) sel.value = l; });
+	[$('langSelect'), $('langSelect2'), $('langSelect3')].forEach(sel => { if (sel) sel.value = l; });
 	applyStaticI18n();
 	rerenderAll();
 }
 
 function fillLangSelects() {
 	const opts = window.I18N.langs.map(l => `<option value="${l.code}">${esc(l.name)}</option>`).join('');
-	[$('langSelect'), $('langSelect2')].forEach(sel => { if (sel) { sel.innerHTML = opts; sel.value = LANG; sel.addEventListener('change', e => setLang(e.target.value)); } });
+	[$('langSelect'), $('langSelect2'), $('langSelect3')].forEach(sel => { if (sel) { sel.innerHTML = opts; sel.value = LANG; sel.addEventListener('change', e => setLang(e.target.value)); } });
 }
 
 function rerenderAll() {
@@ -61,7 +61,7 @@ const ui = {
 	tu: { groups: null, rarity: null, stattrak: null, picks: {} },
 	lastJobKey: {}, jobDismissed: null,
 	addingAccount: false, cart: {}, co: null,
-	settings: { fastBuy: false, favorites: [], autoAcceptGifts: false },
+	settings: { favorites: [], autoAcceptGifts: false, stickerConfirm: true },
 	trades: null, tradeSel: null, tradeDir: 'in', armory: null, armQty: {}, stk: null, stkSel: null, stkBusy: false,
 	market: null, mtab: 'listings', history: null,
 	_wasPending: false, _loadedActive: null, _freshActive: false,
@@ -185,13 +185,15 @@ function renderAccounts(s) {
 	if (ui.addingAccount || accounts.length === 0) { renderLoginFlow(pending, accounts.length > 0); return; }
 
 	showView('mainView');
+	maybeTour();
 	$('guardModal').classList.add('hidden');
 	renderAccountBar(accounts, pending);
 	const active = activeAccount();
 	if (!active) return;
 	if (ui._freshActive || ui._loadedActive !== ui.active) {
 		ui._loadedActive = ui.active; ui._freshActive = false;
-		ui.contents = {}; ui.casketId = null; ui.picks = {}; ui.store = null; ui.cart = {};
+		ui.contents = {}; ui.picks = {}; ui.store = null; ui.cart = {}; ui.state = null;
+		selectCasket(null);  // ящик прошлого аккаунта больше не наш — закрываем панель
 		ui.tu = { groups: null, rarity: null, stattrak: null, picks: {} };
 		ui.overview = null; ui.trades = null; ui.market = null; ui.sell = null; ui.history = null; ui.armory = null;
 		if (ui.tab === 'trades') loadTrades();
@@ -257,7 +259,7 @@ function avatarHtml(a, cls = '') {
 function renderAccountBar(accounts, pending) {
 	const chips = accounts.map(a => {
 		const busy = a.job && !a.job.finished;
-		const cls = a.needsRelogin ? 'warn' : a.status === 'online' ? 'ok' : a.status === 'connecting' ? 'warn' : 'bad';
+		const cls = a.proxyBad ? 'bad' : a.needsRelogin ? 'warn' : a.status === 'online' ? 'ok' : a.status === 'connecting' ? 'warn' : 'bad';
 		return `<div class="acct ${a.login === ui.active ? 'sel' : ''}" data-acct="${esc(a.login)}">
 			${avatarHtml(a, 'acct-av')}
 			<span class="acct-dot ${cls}"></span>
@@ -288,20 +290,38 @@ function handleActiveJob(active) {
 
 // ============================================================ основной экран (активный аккаунт)
 async function loadState() {
-	ui.state = await apiGet('/api/state');
+	const acc = ui.active;
+	const st = await apiGet('/api/state');
+	if (acc !== ui.active) return;  // пока грузили, переключились на другой аккаунт
+	ui.state = st;
 	renderTop(); renderCaskets();
-	if (ui.casketId && !ui.state.caskets.some(c => c.id === ui.casketId)) selectCasket(null);
+	if (!ui.casketId || !ui.state.caskets.some(c => c.id === ui.casketId)) selectCasket(null);
 	else renderPanel();
 }
 
+// Без выбранного ящика: подсказка + инвентарь (только просмотр). Нет ящиков — предложение купить.
+function renderEmptyState() {
+	const s = ui.state;
+	const none = s && !s.caskets.length;
+	$('emptyTitle').textContent = !s ? t('loading') : none ? t('no_caskets_title') : t('select_casket');
+	$('emptyStats').textContent = !s ? '' : none ? t('no_caskets_text') : t('empty_stats', { c: s.caskets.length, a: fmt(s.caskets.reduce((n, c) => n + c.count, 0)), b: fmt(s.inventoryCount) });
+	$('emptyBuy').classList.toggle('hidden', !none);
+	const inv = s ? s.inventory : [];
+	$('invPreview').innerHTML = inv.length ? `<div class="section-title" style="margin:6px 0 10px">${esc(t('inventory'))} · ${fmt(s.inventoryCount)}</div>` + inv.map(i => `
+		<div class="item"><div class="thumb">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy">` : ''}</div>
+			<div style="min-width:0"><div class="item-name" title="${esc(i.name)}">${esc(i.name)}</div></div>
+			<span class="muted">×${fmt(i.count)}</span></div>`).join('') : '';
+}
+
 function renderTop() {
-	const s = ui.state; if (!s) return;
+	const s = ui.state;
+	$('walletText').textContent = s && s.wallet ? `${money(s.wallet.balance)} ${s.wallet.currency}` : '—';
+	if (!s) return;
 	$('invMeterText').textContent = `${s.inventoryCount} / ${s.inventoryLimit}`;
 	const pct = s.inventoryCount / s.inventoryLimit * 100;
 	$('invMeter').style.width = `${pct}%`;
 	$('invMeter').className = pct >= 98 ? 'full' : pct >= 85 ? 'warn' : '';
-	const inCaskets = s.caskets.reduce((n, c) => n + c.count, 0);
-	$('emptyStats').textContent = t('empty_stats', { c: s.caskets.length, a: fmt(inCaskets), b: fmt(s.inventoryCount) });
+	if (!ui.casketId) renderEmptyState();
 }
 
 function renderCaskets() {
@@ -328,8 +348,11 @@ async function selectCasket(id) {
 	renderCaskets();
 	$('emptyState').classList.toggle('hidden', Boolean(id));
 	$('casketPanel').classList.toggle('hidden', !id);
-	if (!id) return;
+	if (!id) { renderEmptyState(); return; }
 	const c = currentCasket();
+	if (!c) { ui.casketId = null; return selectCasket(null); }
+	if (c.count >= c.capacity) ui.op = 'take';
+	else if (c.count === 0) ui.op = 'store';
 	if (!c.name) { $('renameRow').classList.remove('hidden'); $('renameInput').focus(); }
 	if (ui.op === 'take') await loadContents(id);
 	renderPanel();
@@ -469,7 +492,10 @@ function renderJob(job) {
 let pollTimer = null;
 async function poll(now) {
 	clearTimeout(pollTimer);
-	try { ui.status = await api('/api/status'); renderAccounts(ui.status); }
+	try {
+		ui.status = await api('/api/status'); renderAccounts(ui.status); handleAlerts(ui.status.alerts);
+		if (!ui.guard) { const bad = (ui.status.accounts || []).filter(a => a.proxyBad).length; $('guardTopBadge').classList.toggle('hidden', !bad); $('guardTopBadge').textContent = bad; }
+	}
 	catch (e) { /* сервер ещё стартует */ }
 	const s = ui.status;
 	const busy = s && ((s.pending && ['connecting', 'guard', 'qr'].includes(s.pending.status)) || (s.accounts || []).some(a => a.job && !a.job.finished));
@@ -479,7 +505,9 @@ async function poll(now) {
 // ============================================================ вкладки и магазин
 function switchTab(tab) {
 	ui.tab = tab;
-	document.querySelectorAll('#topnav button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+	document.querySelectorAll('#sideNav [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+	$('guardView').classList.toggle('hidden', tab !== 'guard');
+	if (tab === 'guard') loadGuard();
 	$('overviewView').classList.toggle('hidden', tab !== 'overview');
 	$('casketsView').classList.toggle('hidden', tab !== 'caskets');
 	$('storeView').classList.toggle('hidden', tab !== 'store');
@@ -568,7 +596,6 @@ function updateCartBtn() {
 	$('cartTotal').textContent = `${money(total)} ${ui.store ? ui.store.currency : ''}`;
 	$('cartBtn').disabled = !count;
 	$('cartReset').disabled = !count;
-	$('fastBadge').classList.toggle('hidden', !ui.settings.fastBuy);
 }
 
 async function toggleFavorite(def) {
@@ -581,22 +608,40 @@ async function toggleFavorite(def) {
 // ============================================================ настройки приложения
 async function loadSettings() {
 	try { ui.settings = await api('/api/settings'); } catch (e) { /* по умолчанию */ }
-	$('fastBuyToggle').checked = ui.settings.fastBuy;
 	$('giftToggle').checked = ui.settings.autoAcceptGifts;
 	updateCartBtn();
+	maybeWelcome();
 }
 
 function openSettings() {
-	$('fastBuyToggle').checked = ui.settings.fastBuy;
-	$('nudgeOff').checked = Boolean(ui.settings.supportHideNudges);
+	$('stickerConfirmToggle').checked = ui.settings.stickerConfirm !== false;
+	$('nudgeToggle').checked = !ui.settings.supportHideNudges;
 	$('settingsModal').classList.remove('hidden');
 }
 
-async function setFastBuy(on) {
-	ui.settings.fastBuy = on;
-	try { ui.settings = await api('/api/settings', { fastBuy: on }); } catch (e) { toast(e.message, 'bad'); }
-	updateCartBtn();
-	if (ui.co) $('coHint').classList.toggle('hidden', ui.settings.fastBuy);
+async function saveSetting(patch) {
+	Object.assign(ui.settings, patch);
+	try { ui.settings = await api('/api/settings', patch); } catch (e) { toast(e.message, 'bad'); }
+}
+
+// Небольшое окно подтверждения (вместо системного confirm). Возвращает { ok, dont } — dont = «больше не показывать».
+const ICON_Q = '<svg viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.3-2.5 3.8M12 17v.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+const ICON_WALLET = '<svg viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3M4 7.5V17a2 2 0 0 0 2 2h14V8H6.5A2.5 2.5 0 0 1 4 7.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="16" cy="13.5" r="1.3" fill="currentColor"/></svg>';
+function miniConfirm({ icon = ICON_Q, warn = false, title, text, extra = '', ok = 'OK', dontShow = false }) {
+	return new Promise(resolve => {
+		$('miniIcon').innerHTML = icon; $('miniIcon').classList.toggle('warn', warn);
+		$('miniTitle').textContent = title || '';
+		$('miniText').textContent = text || '';
+		$('miniExtra').innerHTML = extra;
+		$('miniDontWrap').classList.toggle('hidden', !dontShow); $('miniDont').checked = false;
+		$('miniOk').textContent = ok;
+		$('miniModal').classList.remove('hidden');
+		$('miniOk').focus();
+		const done = v => { $('miniModal').classList.add('hidden'); $('miniOk').onclick = $('miniCancel').onclick = null; ui.miniAnswer = null; resolve({ ok: v, dont: $('miniDont').checked }); };
+		ui.miniAnswer = done;
+		$('miniOk').onclick = () => done(true);
+		$('miniCancel').onclick = () => done(false);
+	});
 }
 
 // ============================================================ оформление покупки
@@ -613,7 +658,6 @@ function openCheckout(lines) {
 	$('coAvatar').outerHTML = avatarHtml(acc).replace('class="avatar', 'id="coAvatar" class="avatar');
 	$('coLogin').textContent = acc.personaName || ui.active || '';
 	$('coBalance').textContent = ui.store && ui.store.balance != null ? `(${money(ui.store.balance)} ${ui.store.currency})` : '';
-	$('coHint').classList.toggle('hidden', ui.settings.fastBuy);
 	$('checkoutModal').classList.remove('hidden');
 	runCheckout();
 }
@@ -652,33 +696,19 @@ function coAskAuthorize(order, line) {
 		</table>
 		<div class="co-total"><span class="muted">${esc(t('total'))}</span><b>${money(order.total)} ${esc(order.currency)}</b></div>
 		${order.refundable ? `<div class="co-note">${esc(t('refund_note'))}</div>` : ''}
-		<label class="check co-dontshow"><input type="checkbox" id="coDontShow"> <span>${esc(t('dont_show'))}</span></label>
-		<div class="co-actions" id="coActions"></div>`);
-	// Двухшаговое подтверждение: «Оплатить» → «Подтверждаю оплату {сумма}». Только после второго шага списание.
+		<div class="co-actions">
+			<button class="btn ghost" id="coCancel">${esc(t('cancel'))}</button>
+			<button class="btn primary big" id="coAuthorize">${esc(t('authorize'))}</button>
+		</div>`);
+	$('coAuthorize').focus();
+	// Двухшаговое подтверждение: «Оплатить» → мини-окно «спишется N — OK». Только после OK — списание.
 	return new Promise(resolve => {
 		ui.co.answer = ok => { ui.co.answer = null; resolve(ok); };
-		const sum = `${money(order.total)} ${order.currency}`;
-		const step1 = () => {
-			$('coActions').innerHTML = `
-				<button class="btn ghost" id="coCancel">${esc(t('cancel'))}</button>
-				<button class="btn primary big" id="coAuthorize">${esc(t('authorize'))}</button>`;
-			$('coCancel').onclick = () => ui.co.answer && ui.co.answer(false);
-			$('coAuthorize').onclick = step2;
-			$('coAuthorize').focus();
+		$('coCancel').onclick = () => ui.co.answer && ui.co.answer(false);
+		$('coAuthorize').onclick = async () => {
+			const r = await miniConfirm({ icon: ICON_WALLET, title: t('pay_confirm_title'), text: t('pay_confirm_text', { total: `${money(order.total)} ${order.currency}` }), ok: t('pay_confirm_btn') });
+			if (r.ok && ui.co && ui.co.answer) ui.co.answer(true);
 		};
-		const step2 = () => {
-			$('coActions').innerHTML = `
-				<button class="btn ghost" id="coBack">${esc(t('back'))}</button>
-				<span class="co-confirm-text">${esc(t('pay_confirm_text', { total: sum }))}</span>
-				<button class="btn primary big" id="coPay">${esc(t('pay_confirm_btn'))}</button>`;
-			$('coBack').onclick = step1;
-			$('coPay').onclick = async () => {
-				if ($('coDontShow').checked) await setFastBuy(true);  // дальше — без окна (вернуть можно в настройках)
-				ui.co.answer && ui.co.answer(true);
-			};
-			$('coPay').focus();
-		};
-		step1();
 	});
 }
 
@@ -712,17 +742,15 @@ async function runCheckout() {
 			catch (e) { return coFail(line, e.message, false); }
 			co.currency = order.currency;
 			if (order.balance != null) $('coBalance').textContent = `(${money(order.balance)} ${order.currency})`;
-			if (!ui.settings.fastBuy) {
+			co.busy = false;
+			const ok = await coAskAuthorize(order, line);
+			co.busy = true;
+			if (!ok) {
+				api('/api/store/cancel', { account: co.account }).catch(() => {});
+				line.status = 'wait';
 				co.busy = false;
-				const ok = await coAskAuthorize(order, line);
-				co.busy = true;
-				if (!ok) {
-					api('/api/store/cancel', { account: co.account }).catch(() => {});
-					line.status = 'wait';
-					co.busy = false;
-					renderCoLines();
-					return coFinish('bad', t('checkout_cancelled'), [{ label: t('close'), primary: true, run: closeCheckout }]);
-				}
+				renderCoLines();
+				return coFinish('bad', t('checkout_cancelled'), [{ label: t('close'), primary: true, run: closeCheckout }]);
 			}
 			coLoading(t('paying'));
 			try {
@@ -733,10 +761,7 @@ async function runCheckout() {
 		co.busy = false;
 		renderCoLines();
 		const n = co.lines.reduce((s, l) => s + l.bought, 0);
-		coFinish('good', t('checkout_done', { n }), [
-			{ label: '♥ ' + t('support_short'), run: () => { closeCheckout(); openSupport(); } },
-			{ label: t('close'), primary: true, run: closeCheckout },
-		]);
+		coFinish('good', t('checkout_done', { n }), [{ label: t('close'), primary: true, run: closeCheckout }]);
 	} finally { co.busy = false; }
 }
 
@@ -800,7 +825,7 @@ $('loginBack').addEventListener('click', () => { ui.addingAccount = false; rende
 $('savedList').addEventListener('click', e => {
 	const l = e.target.dataset.login, f = e.target.dataset.forget;
 	if (l) login({ mode: 'saved', login: l });
-	if (f && confirm(t('forget_confirm', { login: f }))) api('/api/accounts/forget', { login: f }).then(renderSaved);
+	if (f) miniConfirm({ warn: true, text: t('forget_confirm', { login: f }) }).then(r => { if (r.ok) api('/api/accounts/forget', { login: f }).then(renderSaved); });
 });
 $('maFileInput').addEventListener('change', e => e.target.files[0] && readMaFile(e.target.files[0]));
 const dz = $('dropzone');
@@ -819,10 +844,11 @@ $('accountBar').addEventListener('click', e => {
 	const chip = e.target.closest('[data-acct]');
 	if (add) { ui.addingAccount = true; ui.maFile = null; setMode('qr'); renderLoginFlow(ui.status && ui.status.pending, true); return; }
 	if (x) { const login = x.dataset.logout; api('/api/logout', { account: login }).then(() => { if (ui.active === login) ui.active = null; poll(true); }); return; }
-	if (chip && chip.dataset.acct !== ui.active) { ui.active = chip.dataset.acct; ui._freshActive = true; ui.tab = 'caskets'; switchTab('caskets'); renderAccounts(ui.status); }
+	if (chip && chip.dataset.acct !== ui.active) { ui.active = chip.dataset.acct; ui._freshActive = true; renderAccounts(ui.status); }
 });
 
-$('topnav').addEventListener('click', e => { const t2 = e.target.dataset.tab; if (t2) switchTab(t2); });
+$('sideNav').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) switchTab(b.dataset.tab); });
+$('guardTopBtn').addEventListener('click', () => switchTab('guard'));
 $('casketList').addEventListener('click', e => { const el = e.target.closest('[data-casket]'); if (el) selectCasket(el.dataset.casket); });
 $('showFull').addEventListener('change', e => { ui.showFull = e.target.checked; renderCaskets(); });
 $('modeSwitch').addEventListener('click', async e => {
@@ -894,12 +920,15 @@ $('storeGrid').addEventListener('focusin', e => { if (e.target.dataset.qin) e.ta
 $('cartReset').addEventListener('click', () => { ui.cart = {}; renderStore(); });
 $('cartBtn').addEventListener('click', () => { const lines = cartLines(); if (lines.length) openCheckout(lines); });
 $('buyBtn').addEventListener('click', buyContainer);
+$('emptyBuy').addEventListener('click', buyContainer);
 $('settingsBtn').addEventListener('click', openSettings);
 $('settingsClose').addEventListener('click', () => $('settingsModal').classList.add('hidden'));
-$('fastBuyToggle').addEventListener('change', e => setFastBuy(e.target.checked));
-$('coHintLink').addEventListener('click', e => { e.preventDefault(); openSettings(); });
+$('stickerConfirmToggle').addEventListener('change', e => saveSetting({ stickerConfirm: e.target.checked }));
+$('nudgeToggle').addEventListener('change', e => saveSetting({ supportHideNudges: !e.target.checked }));
 document.addEventListener('keydown', e => {
 	if (e.key !== 'Escape') return;
+	if (ui.tourStep != null) return endTour();
+	if (ui.miniAnswer) return ui.miniAnswer(false);
 	if (!$('supportModal').classList.contains('hidden')) return $('supportModal').classList.add('hidden');
 	if (!$('settingsModal').classList.contains('hidden')) return $('settingsModal').classList.add('hidden');
 	if (ui.co && ui.co.answer) return ui.co.answer(false);
@@ -911,8 +940,11 @@ const RARITY_COLORS = { 1: '#b0c3d9', 2: '#5e98d9', 3: '#4b69ff', 4: '#8847ff', 
 const RARITY_NAMES = { 1: 'Consumer', 2: 'Industrial', 3: 'Mil-Spec', 4: 'Restricted', 5: 'Classified', 6: 'Covert', 7: 'Contraband' };
 
 async function loadOverview() {
-	try { ui.overview = await apiGet('/api/overview'); renderOverview(); }
-	catch (e) { toast(e.message, 'bad'); }
+	try {
+		if ((ui.ovScope || 'one') === 'all') ui.overviewAll = await api('/api/overview/all');
+		else ui.overview = await apiGet('/api/overview');
+		renderOverview();
+	} catch (e) { toast(e.message, 'bad'); }
 }
 
 function ovBars(elId, rows) {
@@ -925,27 +957,63 @@ function ovBars(elId, rows) {
 		</div>`).join('') : '<p class="muted small" style="padding:8px">—</p>';
 }
 
-function renderOverview() {
-	const o = ui.overview; if (!o) return;
-	$('ovTotal').textContent = fmt(o.totalItems);
-	$('ovTotalSub').textContent = `${fmt(o.inventoryCount)} ${t('in_inventory')} · ${fmt(o.stored)} ${t('in_casket')}`;
-	$('ovInv').textContent = fmt(o.inventoryCount);
-	$('ovInvNum').textContent = `${o.inventoryCount} / ${o.inventoryLimit}`;
-	const ip = o.inventoryCount / o.inventoryLimit * 100;
-	$('ovInvMeter').style.width = `${ip}%`;
-	$('ovInvMeter').className = ip >= 98 ? 'full' : ip >= 85 ? 'warn' : '';
-	$('ovStored').textContent = fmt(o.stored);
-	$('ovStNum').textContent = t('ov_caskets', { n: o.casketCount });
-	const sp = o.casketCapacity ? o.stored / o.casketCapacity * 100 : 0;
-	$('ovStMeter').style.width = `${sp}%`;
-	$('ovStMeter').className = sp >= 98 ? 'full' : sp >= 85 ? 'warn' : '';
-	const rarityRows = Object.keys(o.byRarity).map(Number).sort((a, b) => b - a)
-		.map(r => ({ label: RARITY_NAMES[r] || ('#' + r), count: o.byRarity[r], color: RARITY_COLORS[r] }));
-	ovBars('ovRarity', rarityRows);
-	const kindRows = Object.entries(o.byKind).sort((a, b) => b[1] - a[1])
-		.map(([k, c]) => ({ label: t('kind_' + k), count: c }));
-	ovBars('ovKind', kindRows);
+const ovTile = (label, value, sub = '', meter = null, cls = '') => `<div class="ov-tile ${cls}">
+	<div class="ov-tile-h"><span>${esc(label)}</span>${meter ? `<span class="muted small">${esc(meter.text)}</span>` : ''}</div>
+	<div class="ov-tile-v">${value}</div>
+	${sub ? `<div class="ov-tile-s muted small">${sub}</div>` : ''}
+	${meter ? `<div class="meter"><i class="${meter.pct >= 98 ? 'full' : meter.pct >= 85 ? 'warn' : ''}" style="width:${meter.pct}%"></i></div>` : ''}
+</div>`;
+
+function walletSum(list) {
+	const by = {};
+	for (const o of list) if (o.wallet) by[o.wallet.currency] = (by[o.wallet.currency] || 0) + o.wallet.balance;
+	return Object.entries(by).map(([c, v]) => `${money(v)} ${esc(c)}`).join('<br>') || '—';
 }
+
+function renderOverview() {
+	const scope = ui.ovScope || 'one';
+	document.querySelectorAll('#ovScope button').forEach(b => b.classList.toggle('active', b.dataset.scope === scope));
+	$('ovAllCnt').textContent = ((ui.status && ui.status.accounts) || []).length;
+	$('ovAccounts').classList.toggle('hidden', scope !== 'all');
+	$('ovOneExtra').classList.toggle('hidden', scope !== 'one');
+	const list = scope === 'all' ? (ui.overviewAll || []).filter(o => o.inventoryLimit) : (ui.overview ? [ui.overview] : []);
+	if (!list.length) { $('ovTiles').innerHTML = ''; return; }
+	const sum = k => list.reduce((n, o) => n + (o[k] || 0), 0);
+	const inv = sum('inventoryCount'), lim = sum('inventoryLimit'), st = sum('stored'), cap = sum('casketCapacity');
+	$('ovTiles').innerHTML = [
+		ovTile(t('ov_total'), fmt(inv + st), `${fmt(inv)} ${t('in_inventory')} · ${fmt(st)} ${t('in_casket')}`),
+		ovTile(t('inventory'), fmt(inv), '', { pct: lim ? inv / lim * 100 : 0, text: `${fmt(inv)} / ${fmt(lim)}` }),
+		ovTile(t('ov_storage'), fmt(st), t('ov_caskets', { n: sum('casketCount') }), { pct: cap ? st / cap * 100 : 0, text: `${fmt(st)} / ${fmt(cap)}` }),
+		ovTile(t('wallet_label'), walletSum(list), scope === 'all' ? t('ov_accounts_n', { n: list.length }) : '', null, 'good'),
+		ovTile(t('ov_protected'), fmt(sum('protectedCount')), t('ov_protected_sub')),
+		ovTile(t('ov_tradeup_ready'), fmt(sum('tradeUpReady')), t('ov_tradeup_sub')),
+	].join('');
+	const merge = key => { const out = {}; for (const o of list) for (const [k, v] of Object.entries(o[key] || {})) out[k] = (out[k] || 0) + v; return out; };
+	const byRarity = merge('byRarity'), byKind = merge('byKind');
+	ovBars('ovRarity', Object.keys(byRarity).map(Number).sort((a, b) => b - a).map(r => ({ label: RARITY_NAMES[r] || ('#' + r), count: byRarity[r], color: RARITY_COLORS[r] })));
+	ovBars('ovKind', Object.entries(byKind).sort((a, b) => b[1] - a[1]).map(([k, c]) => ({ label: t('kind_' + k), count: c })));
+	if (scope === 'one') {
+		const o = list[0];
+		$('ovTop').innerHTML = (o.top || []).map(i => `<div class="ov-top-row"><div class="thumb">${i.image ? `<img src="${esc(i.image)}" alt="">` : ''}</div><span class="grow">${esc(i.name)}</span><b>×${fmt(i.count)}</b></div>`).join('') || '<p class="muted small">—</p>';
+		const cs = o.caskets || [];
+		$('ovCaskets').innerHTML = cs.length ? cs.map(c => `<div class="ov-bar"><span class="ov-bar-label">${esc(c.name || '—')}</span>
+			<span class="ov-bar-track"><i style="width:${(c.count / c.capacity * 100).toFixed(1)}%"></i></span><span class="ov-bar-n">${fmt(c.count)}</span></div>`).join('')
+			: `<p class="muted small">${esc(t('no_caskets_title'))}</p>`;
+	} else {
+		const rows = (ui.overviewAll || []);
+		$('ovAccounts').innerHTML = `<div class="section-title" style="margin-bottom:10px">${esc(t('ov_accounts'))}</div>
+			<table class="mt"><thead><tr><th>${esc(t('ov_account'))}</th><th>${esc(t('inventory'))}</th><th class="num">${esc(t('ov_storage'))}</th><th class="num">${esc(t('ov_total'))}</th><th class="num">${esc(t('wallet_label'))}</th></tr></thead><tbody>
+			${rows.map(o => o.inventoryLimit ? `<tr><td><div class="it">${avatarHtml(o, 'acct-av')}<div><div>${esc(o.personaName || o.login)}</div><div class="sub">${esc(o.login)}</div></div></div></td>
+				<td><div class="ov-mini">${fmt(o.inventoryCount)} / ${fmt(o.inventoryLimit)}<div class="meter"><i style="width:${o.inventoryCount / o.inventoryLimit * 100}%"></i></div></div></td>
+				<td class="num">${fmt(o.stored)} <span class="sub">· ${fmt(o.casketCount)} ${esc(t('caskets').toLowerCase())}</span></td><td class="num">${fmt(o.inventoryCount + o.stored)}</td>
+				<td class="num good-text">${o.wallet ? `${money(o.wallet.balance)} ${esc(o.wallet.currency)}` : '—'}</td></tr>`
+				: `<tr><td>${esc(o.login)}</td><td colspan="4" class="muted">${esc(o.error || t('offline'))}</td></tr>`).join('')}
+			</tbody></table>`;
+	}
+}
+
+$('ovScope').addEventListener('click', e => { const b = e.target.closest('[data-scope]'); if (b) { ui.ovScope = b.dataset.scope; renderOverview(); loadOverview(); } });
+$('ovRefresh').addEventListener('click', loadOverview);
 
 // ============================================================ контракт обмена (трейд-ап)
 // Названия грейдов — игровые термины CS2, одинаковы на всех языках.
@@ -989,22 +1057,38 @@ function selectTuGroup(rarity, stattrak) {
 const tuTotal = () => Object.values(ui.tu.picks).reduce((a, b) => a + b, 0);
 function tuSetPick(name, value, max) { const n = Math.max(0, Math.min(max, Math.floor(Number(value) || 0))); if (n) ui.tu.picks[name] = n; else delete ui.tu.picks[name]; }
 
+// Выбор предметов для контракта: сверху 10 слотов (заполняются выбранными), ниже — карточки скинов.
+// Клик по карточке — +1, «−» на карточке или клик по слоту — убрать.
 function renderTuItems() {
 	const g = currentTuGroup(); if (!g) return;
-	$('tuItems').innerHTML = g.items.map(i => {
+	const q = ($('tuSearch').value || '').toLowerCase();
+	const items = g.items.filter(i => !q || i.name.toLowerCase().includes(q));
+	$('tuItems').innerHTML = items.map(i => {
 		const n = ui.tu.picks[i.name] || 0;
-		return `<div class="item ${n ? 'picked' : ''}">
-			<div class="thumb">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy">` : ''}</div>
-			<div style="min-width:0"><div class="item-name" title="${esc(i.name)}">${esc(i.name)}</div>
-				<div class="item-sub">${t('in_inventory')}: ${fmt(i.count - (i.stored || 0))}${i.stored ? ` · ${t('in_casket')}: ${fmt(i.stored)}` : ''}</div></div>
-			<div class="stepper" data-name="${esc(i.name)}" data-max="${i.count}">
-				<button data-step="-1">−</button>
-				<input type="number" min="0" max="${i.count}" value="${n || ''}" placeholder="0">
-				<button data-step="1">+</button>
-			</div>
+		const full = tuTotal() >= 10 && !n;
+		return `<div class="tu-card r${g.rarity} ${n ? 'picked' : ''} ${full ? 'dim' : ''}" data-tu="${esc(i.name)}" title="${esc(i.name)}">
+			${n ? `<span class="tu-n">×${n}</span><button class="tu-minus" data-tuminus="${esc(i.name)}">−</button>` : ''}
+			<div class="tu-img">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy">` : ''}</div>
+			<div class="tu-name">${esc(i.name)}</div>
+			<div class="tu-sub">${t('in_inventory')}: ${fmt(i.count - (i.stored || 0))}${i.stored ? ` · ${t('in_casket')}: ${fmt(i.stored)}` : ''}</div>
 		</div>`;
-	}).join('');
+	}).join('') || `<div class="empty-box">${esc(t('nothing_found'))}</div>`;
+	renderTuTray();
 	tuUpdateAction();
+}
+
+function renderTuTray() {
+	const g = currentTuGroup(); if (!g) return;
+	const slots = [];
+	for (const [name, n] of Object.entries(ui.tu.picks)) {
+		const it = g.items.find(x => x.name === name);
+		for (let k = 0; k < n; k++) slots.push(it);
+	}
+	$('tuTray').innerHTML = Array.from({ length: 10 }, (_, i) => {
+		const it = slots[i];
+		return it ? `<div class="tu-slot full r${g.rarity}" data-tuminus="${esc(it.name)}" title="${esc(it.name)}">${it.image ? `<img src="${esc(it.image)}" alt="">` : `<span>${esc(it.name.slice(0, 10))}</span>`}</div>`
+			: `<div class="tu-slot"><span>${i + 1}</span></div>`;
+	}).join('');
 }
 
 function tuUpdateAction() {
@@ -1012,12 +1096,7 @@ function tuUpdateAction() {
 	$('tuCount').textContent = total;
 	$('tuWarn').textContent = total === 10 ? '' : (total > 10 ? t('tradeup_need10', { n: total }) : '');
 	$('tuDo').disabled = total !== 10;
-	document.querySelectorAll('#tuItems .stepper').forEach(st => {
-		const n = ui.tu.picks[st.dataset.name] || 0;
-		const input = st.querySelector('input');
-		if (document.activeElement !== input) input.value = n || '';
-		st.closest('.item').classList.toggle('picked', Boolean(n));
-	});
+
 }
 
 async function runTradeUp() {
@@ -1028,12 +1107,11 @@ async function runTradeUp() {
 		if (it) ids.push(...it.ids.slice(0, count));
 	}
 	if (ids.length !== 10) return toast(t('tradeup_need10', { n: ids.length }), 'bad');
-	if (!confirm(t('tradeup_confirm'))) return;
+	if (!(await miniConfirm({ warn: true, title: t('tradeup_do'), text: t('tradeup_confirm') })).ok) return;
 	$('tuDo').disabled = true;
 	try {
 		const r = await apiPost('/api/tradeup/craft', { itemIds: ids });
 		toast(r.name ? t('tradeup_done', { name: r.name }) : t('tradeup_done_unknown'), 'good');
-		setTimeout(() => nudgeSupport(t('nudge_generic')), 1500);
 		await loadTradeup();
 		if (ui.state) loadState().catch(() => {});
 	} catch (e) { toast(e.message, 'bad'); tuUpdateAction(); }
@@ -1041,12 +1119,18 @@ async function runTradeUp() {
 
 $('tuGroups').addEventListener('click', e => { const el = e.target.closest('[data-rarity]'); if (el) selectTuGroup(Number(el.dataset.rarity), el.dataset.st === '1'); });
 $('tuItems').addEventListener('click', e => {
-	const st = e.target.closest('.stepper'); const step = e.target.dataset.step;
-	if (!st || !step) return;
-	tuSetPick(st.dataset.name, (ui.tu.picks[st.dataset.name] || 0) + Number(step), Number(st.dataset.max));
-	tuUpdateAction();
+	const minus = e.target.closest('[data-tuminus]');
+	const card = e.target.closest('[data-tu]');
+	const g = currentTuGroup(); if (!g) return;
+	if (minus) { const name = minus.dataset.tuminus; tuSetPick(name, (ui.tu.picks[name] || 0) - 1, 999); renderTuItems(); return; }
+	if (card) {
+		const it = g.items.find(x => x.name === card.dataset.tu);
+		if (it && tuTotal() < 10) { tuSetPick(it.name, (ui.tu.picks[it.name] || 0) + 1, it.count); renderTuItems(); }
+	}
 });
-$('tuItems').addEventListener('input', e => { const st = e.target.closest('.stepper'); if (!st) return; tuSetPick(st.dataset.name, e.target.value, Number(st.dataset.max)); tuUpdateAction(); });
+$('tuTray').addEventListener('click', e => { const s2 = e.target.closest('[data-tuminus]'); if (s2) { tuSetPick(s2.dataset.tuminus, (ui.tu.picks[s2.dataset.tuminus] || 0) - 1, 999); renderTuItems(); } });
+$('tuSearch').addEventListener('input', renderTuItems);
+$('tuClear').addEventListener('click', () => { ui.tu.picks = {}; renderTuItems(); });
 $('tuDo').addEventListener('click', runTradeUp);
 $('tuCaskets').addEventListener('change', loadTradeup);
 
@@ -1106,7 +1190,7 @@ function renderTradeDetail() {
 
 async function tradeAction(action) {
 	const o = (ui.trades || []).find(x => x.id === ui.tradeSel); if (!o) return;
-	if (action === 'accept' && o.give.length && !confirm(t('trade_accept_confirm', { n: o.give.length }))) return;
+	if (action === 'accept' && o.give.length && !(await miniConfirm({ warn: true, text: t('trade_accept_confirm', { n: o.give.length }) })).ok) return;
 	$('tradeDetail').querySelectorAll('[data-tact]').forEach(b => { b.disabled = true; });
 	try {
 		const r = await apiPost('/api/trades/action', { id: o.id, action, partner: o.partner });
@@ -1239,7 +1323,7 @@ async function sellNow() {
 		for (const assetid of g.assetids.slice(0, p.qty)) { items.push({ assetid, buyerPays: p.price }); total += sellReceive(p.price); }
 	}
 	if (!items.length) return;
-	if (!confirm(t('m_sell_confirm', { n: items.length, total: money(total), currency: ui.sell.currency }))) return;
+	if (!(await miniConfirm({ title: t('m_sell'), text: t('m_sell_confirm', { n: items.length, total: money(total), currency: ui.sell.currency }) })).ok) return;
 	$('mBulk').disabled = true;
 	toast(t('m_selling', { n: items.length }));
 	try {
@@ -1247,7 +1331,6 @@ async function sellNow() {
 		toast(t('m_sold_result', { n: r.listed }) + (r.confirmed ? ' · ' + t('m_auto_confirmed', { n: r.confirmed }) : r.needsConfirmation ? ' · ' + t('trade_need_confirm') : ''), r.failed.length ? 'bad' : 'good');
 		if (r.failed.length) toast(r.failed[0].error, 'bad');
 		ui.sell = null; ui.market = null; await loadMarket();
-		if (r.listed) setTimeout(() => nudgeSupport(t('nudge_generic')), 1500);
 	} catch (e) { toast(e.message, 'bad'); }
 	finally { $('mBulk').disabled = false; }
 }
@@ -1284,8 +1367,8 @@ document.querySelector('.market-stats').addEventListener('click', e => { const b
 $('marketSearch').addEventListener('input', renderMarket);
 $('marketTable').addEventListener('click', e => {
 	const d = e.target.dataset;
-	if (d.mremove && confirm(t('m_remove_confirm'))) marketAct('/api/market/remove', { id: d.mremove }, t('m_removed'));
-	if (d.mcancel && confirm(t('m_cancel_confirm'))) marketAct('/api/market/cancelorder', { id: d.mcancel }, t('m_cancelled'));
+	if (d.mremove) miniConfirm({ text: t('m_remove_confirm') }).then(r => r.ok && marketAct('/api/market/remove', { id: d.mremove }, t('m_removed')));
+	if (d.mcancel) miniConfirm({ text: t('m_cancel_confirm') }).then(r => r.ok && marketAct('/api/market/cancelorder', { id: d.mcancel }, t('m_cancelled')));
 	if (d.callow) marketAct('/api/confirmations', { ids: [d.callow], accept: true }, t('m_confirmed'));
 	if (d.cdeny) marketAct('/api/confirmations', { ids: [d.cdeny], accept: false }, t('m_denied'));
 	if (e.target.id === 'mMore') { e.target.disabled = true; loadHistory(ui.history.rows.length); }
@@ -1308,8 +1391,214 @@ $('mBulk').addEventListener('click', () => {
 	if (ui.mtab === 'sell') return sellNow();
 	const q = ($('marketSearch').value || '').toLowerCase();
 	const ids = (ui.market.confirmations || []).filter(c => !q || (c.title + ' ' + c.summary.join(' ')).toLowerCase().includes(q)).map(c => c.id);
-	if (ids.length && confirm(t('m_confirm_all', { n: ids.length }) + '?')) marketAct('/api/confirmations', { ids, accept: true }, t('m_confirmed'));
+	if (ids.length) miniConfirm({ title: t('m_confirm_all', { n: ids.length }), text: t('guard_confirm_all') }).then(r => r.ok && marketAct('/api/confirmations', { ids, accept: true }, t('m_confirmed')));
 });
+
+// ============================================================ Steam Guard (мини-SDA)
+async function loadGuard() {
+	if (!ui.guard) $('guardList').innerHTML = Array.from({ length: 4 }, () => '<div class="skeleton" style="height:64px"></div>').join('');
+	try {
+		const [accounts, codes] = await Promise.all([api('/api/guard/accounts'), api('/api/guard/codes')]);
+		ui.guard = { accounts, codes, at: Date.now(), conf: (ui.guard && ui.guard.conf) || {} };
+		if (!ui.guardSel || !accounts.some(a => a.login === ui.guardSel)) ui.guardSel = (accounts.find(a => a.login === ui.active) || accounts[0] || {}).login || null;
+		renderGuard();
+		if (ui.guardSel) loadGuardConf(ui.guardSel);
+	} catch (e) { $('guardList').innerHTML = `<div class="empty-box">${esc(e.message)}</div>`; }
+	clearInterval(ui.guardTimer);
+	ui.guardTimer = setInterval(guardTick, 1000);
+}
+
+// Обратный отсчёт кода; на смене 30-секундного окна берём новые коды.
+async function guardTick() {
+	if (ui.tab !== 'guard' || !ui.guard) { clearInterval(ui.guardTimer); return; }
+	const left = guardLeft();
+	if (left >= ui.guard.codes.period - 0.5 || left <= 0) {
+		try { ui.guard.codes = await api('/api/guard/codes'); ui.guard.at = Date.now(); } catch (e) { /* следующая секунда */ }
+	}
+	document.querySelectorAll('[data-gring]').forEach(el => { el.style.width = `${guardLeft() / ui.guard.codes.period * 100}%`; });
+	document.querySelectorAll('[data-gcode]').forEach(el => { el.textContent = ui.guard.codes.codes[el.dataset.gcode] || '—'; });
+	document.querySelectorAll('[data-gleft]').forEach(el => { el.textContent = `${Math.ceil(guardLeft())} s`; });
+}
+const guardLeft = () => Math.max(0, ui.guard.codes.left - (Date.now() - ui.guard.at) / 1000);
+
+function renderGuard() {
+	const g = ui.guard; if (!g) return;
+	const badProxy = g.accounts.filter(a => a.proxyStatus && !a.proxyStatus.ok).length;
+	$('guardTopBadge').classList.toggle('hidden', !badProxy); $('guardTopBadge').textContent = badProxy;
+	$('guardList').innerHTML = g.accounts.map(a => {
+		const code = g.codes.codes[a.login];
+		const px = !a.proxy ? '' : a.proxyStatus ? (a.proxyStatus.ok ? `<span class="g-proxy-ok">● ${esc(t('proxy_ok'))}</span>` : `<span class="g-proxy-bad">● ${esc(t('proxy_bad'))}</span>`) : `<span class="muted">● ${esc(t('proxy_label'))}</span>`;
+		return `<div class="g-acc ${a.login === ui.guardSel ? 'sel' : ''}" data-gacc="${esc(a.login)}">
+			${avatarHtml(a)}
+			<div style="min-width:0"><div class="strong" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.personaName || a.login)}</div>
+				<div class="sub">${a.online ? `<span class="g-proxy-ok">● ${esc(t('online'))}</span>` : `<span>${esc(a.login)}</span>`}${px}${a.wallet ? `<span class="good-text">${money(a.wallet.balance)} ${esc(a.wallet.currency)}</span>` : ''}</div></div>
+			${code ? `<div style="text-align:right"><div class="g-code" data-gcode="${esc(a.login)}" data-gcopy="${esc(a.login)}" title="${esc(t('copy'))}">${esc(code)}</div><div class="g-ring"><i data-gring style="width:${guardLeft() / g.codes.period * 100}%"></i></div></div>`
+				: `<button class="btn ghost small" data-gadd="${esc(a.login)}">${esc(t('guard_add_mafile'))}</button>`}
+		</div>`;
+	}).join('') || `<div class="empty-box">${esc(t('guard_no_accounts'))}</div>`;
+	renderGuardDetail();
+}
+
+function renderGuardDetail() {
+	const g = ui.guard; const a = g && g.accounts.find(x => x.login === ui.guardSel);
+	if (!a) { $('guardDetail').innerHTML = `<div class="empty-box">${esc(t('guard_pick'))}</div>`; return; }
+	const code = g.codes.codes[a.login];
+	const conf = g.conf[a.login];
+	const head = `<div class="g-head">${avatarHtml(a)}<div style="flex:1"><div class="strong">${esc(a.personaName || a.login)}</div><div class="muted small">${esc(a.login)}${a.proxy ? ` · ${esc(t('proxy_label'))}: ${a.proxyStatus ? (a.proxyStatus.ok ? t('proxy_ok') : `<span class="g-proxy-bad">${esc(t('proxy_bad'))}</span>`) : '…'}` : ''}</div></div>
+		${a.proxy ? `<button class="btn ghost small" data-gproxy="${esc(a.login)}">${esc(t('proxy_check'))}</button>` : ''}</div>`;
+	if (!code) {
+		$('guardDetail').innerHTML = head + `<div class="g-add"><div class="strong">${esc(t('guard_no_mafile_t'))}</div>
+			<p class="muted small" style="margin:6px 0 12px">${esc(t('guard_no_mafile'))}</p>
+			<button class="btn primary" data-gadd="${esc(a.login)}">${esc(t('guard_add_mafile'))}</button></div>`;
+		return;
+	}
+	let confHtml;
+	if (!a.canConfirm) confHtml = `<div class="muted small">${esc(t('guard_no_identity'))}</div>`;
+	else if (!conf) confHtml = '<div class="skeleton" style="height:120px"></div>';
+	else if (conf.error) confHtml = `<div class="empty-box">${esc(conf.error)}</div>`;
+	else if (!conf.list.length) confHtml = `<div class="empty-box">${esc(t('m_no_confirm'))}</div>`;
+	else confHtml = conf.list.map(c => `<div class="g-conf">${c.icon ? `<img src="${esc(c.icon)}" alt="">` : '<span></span>'}
+		<div style="min-width:0"><div class="strong">${esc(c.title)}</div><div class="muted small">${esc(c.typeName || '')} · ${esc(c.summary.join(' · '))} · ${esc(tsDate(c.time))}</div></div>
+		<div class="acts"><button class="btn ghost small" data-gdeny="${esc(c.id)}">${esc(t('decline'))}</button><button class="btn good small" data-gallow="${esc(c.id)}">${esc(t('confirm'))}</button></div></div>`).join('');
+	$('guardDetail').innerHTML = head + `
+		<div class="card" style="padding:16px;display:flex;align-items:center;gap:16px">
+			<div><div class="muted small">Steam Guard</div><div class="g-big-code" data-gcode="${esc(a.login)}">${esc(code)}</div></div>
+			<div style="flex:1"><div class="g-ring"><i data-gring style="width:${guardLeft() / g.codes.period * 100}%"></i></div><div class="muted small" data-gleft style="margin-top:4px"></div></div>
+			<button class="btn primary" data-gcopy="${esc(a.login)}">${esc(t('copy'))}</button>
+		</div>
+		<div style="display:flex;align-items:center;gap:8px"><div class="section-title" style="flex:1">${esc(t('m_confirm'))}${conf && conf.list ? ` · ${conf.list.length}` : ''}</div>
+			${conf && conf.list && conf.list.length > 1 ? `<button class="btn good small" data-gallowall="1">${esc(t('m_confirm_all', { n: conf.list.length }))}</button>` : ''}
+			${a.canConfirm ? `<button class="btn ghost small" data-gconfreload="1">${esc(t('refresh'))}</button>` : ''}</div>
+		${confHtml}`;
+}
+
+async function loadGuardConf(login) {
+	const a = ui.guard.accounts.find(x => x.login === login);
+	if (!a || !a.canConfirm || !ui.guard.codes.codes[login]) return;
+	delete ui.guard.conf[login]; renderGuardDetail();
+	try { ui.guard.conf[login] = { list: await api('/api/guard/confirmations?login=' + encodeURIComponent(login)) }; }
+	catch (e) { ui.guard.conf[login] = { error: e.message }; }
+	if (ui.guardSel === login) renderGuardDetail();
+}
+
+async function guardRespond(ids, accept) {
+	const login = ui.guardSel;
+	try {
+		await api('/api/guard/confirmations', { login, ids, accept });
+		toast(t(accept ? 'm_confirmed' : 'm_denied'), 'good');
+	} catch (e) { toast(e.message, 'bad'); }
+	loadGuardConf(login);
+}
+
+$('guardList').addEventListener('click', e => {
+	const add = e.target.closest('[data-gadd]'); if (add) { ui.guardAddFor = add.dataset.gadd; $('guardMaFileInput').value = ''; $('guardMaFileInput').click(); return; }
+	const cp = e.target.closest('[data-gcopy]'); if (cp) { copyText(ui.guard.codes.codes[cp.dataset.gcopy] || ''); return; }
+	const row = e.target.closest('[data-gacc]');
+	if (row && row.dataset.gacc !== ui.guardSel) { ui.guardSel = row.dataset.gacc; renderGuard(); loadGuardConf(ui.guardSel); }
+});
+$('guardDetail').addEventListener('click', async e => {
+	const d = e.target.closest('button') ? e.target.closest('button').dataset : {};
+	if (d.gadd) { ui.guardAddFor = d.gadd; $('guardMaFileInput').value = ''; $('guardMaFileInput').click(); }
+	if (d.gcopy) copyText(ui.guard.codes.codes[d.gcopy] || '');
+	if (d.gallow) guardRespond([d.gallow], true);
+	if (d.gdeny) guardRespond([d.gdeny], false);
+	if (d.gallowall) { const list = (ui.guard.conf[ui.guardSel] || {}).list || []; const r = await miniConfirm({ title: t('m_confirm_all', { n: list.length }), text: t('guard_confirm_all'), ok: t('confirm') }); if (r.ok) guardRespond(list.map(c => c.id), true); }
+	if (d.gconfreload) loadGuardConf(ui.guardSel);
+	if (d.gproxy) { try { const r = await api('/api/guard/proxycheck', { login: d.gproxy }); toast(r.ok ? t('proxy_ok') : `${t('proxy_bad')}: ${r.error}`, r.ok ? 'good' : 'bad'); loadGuard(); } catch (err) { toast(err.message, 'bad'); } }
+});
+$('guardMaFileInput').addEventListener('change', e => {
+	const f = e.target.files[0]; if (!f || !ui.guardAddFor) return;
+	const r = new FileReader();
+	r.onload = async () => {
+		try {
+			const ma = JSON.parse(r.result);
+			await api('/api/guard/mafile', { login: ui.guardAddFor, maFile: ma });
+			toast(t('guard_mafile_added', { login: ui.guardAddFor }), 'good');
+			ui.guardSel = ui.guardAddFor; loadGuard();
+		} catch (err) { toast(err.message || t('mafile_bad'), 'bad'); }
+	};
+	r.readAsText(f);
+});
+$('guardRefresh').addEventListener('click', loadGuard);
+
+// Уведомления сервера (например, прокси перестал работать) — тост + системное уведомление.
+function handleAlerts(alerts) {
+	if (!alerts || !alerts.length) return;
+	if (ui.alertSeen == null) { ui.alertSeen = alerts[alerts.length - 1].id; return; }  // старые не показываем
+	for (const a of alerts.filter(x => x.id > ui.alertSeen)) {
+		const text = a.kind === 'proxy_bad' ? t('alert_proxy_bad', { login: a.login }) : t('alert_proxy_ok', { login: a.login });
+		toast(text + (a.error ? ` — ${a.error}` : ''), a.kind === 'proxy_bad' ? 'bad' : 'good');
+		try { if (a.kind === 'proxy_bad' && window.Notification && Notification.permission !== 'denied') new Notification('Caskit', { body: text }); } catch (e) { /* без системных уведомлений */ }
+	}
+	ui.alertSeen = alerts[alerts.length - 1].id;
+	if (ui.tab === 'guard') loadGuard();
+}
+
+// ============================================================ первый запуск: приветствие и гайд
+const GITHUB_URL = 'https://github.com/pythonMaster2002/cs2-storage-manager';
+
+function maybeWelcome() {
+	if (ui.settings.welcomed) return;
+	if (window.desktop) window.desktop.version().then(v => { $('welcomeVersion').textContent = v; });
+	else $('welcomeVersion').textContent = '—';
+	$('welcomeModal').classList.remove('hidden');
+}
+
+// Гайд: подсвечиваем элементы по очереди. Запускается один раз после первого входа (или из настроек).
+const TOUR = [
+	{ el: '#accountBar', key: 'tour_accounts' },
+	{ el: '#walletBlock', key: 'tour_wallet' },
+	{ el: '#sideNav [data-tab="caskets"]', key: 'tour_caskets', tab: 'caskets' },
+	{ el: '#sideNav [data-tab="overview"]', key: 'tour_overview' },
+	{ el: '#sideNav [data-tab="tradeup"]', key: 'tour_tradeup' },
+	{ el: '#sideNav [data-tab="store"]', key: 'tour_store' },
+	{ el: '#sideNav [data-tab="trades"]', key: 'tour_steam' },
+	{ el: '#sideNav [data-tab="guard"]', key: 'tour_guard' },
+	{ el: '#settingsBtn', key: 'tour_settings' },
+];
+
+function startTour() {
+	ui.tourStep = 0;
+	$('tour').classList.remove('hidden');
+	showTourStep();
+}
+
+function endTour() {
+	$('tour').classList.add('hidden');
+	ui.tourStep = null;
+	if (!ui.settings.tourDone) saveSetting({ tourDone: true });
+}
+
+function showTourStep() {
+	const st = TOUR[ui.tourStep];
+	if (!st) return endTour();
+	const el = document.querySelector(st.el);
+	if (!el || !el.getBoundingClientRect().width) { ui.tourStep++; return showTourStep(); }
+	const r = el.getBoundingClientRect(), pad = 6;
+	Object.assign($('tourSpot').style, { left: `${r.left - pad}px`, top: `${r.top - pad}px`, width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px` });
+	$('tourStep').textContent = `${ui.tourStep + 1} / ${TOUR.length}`;
+	$('tourTitle').textContent = t(st.key + '_t');
+	$('tourText').textContent = t(st.key);
+	$('tourNext').textContent = ui.tourStep === TOUR.length - 1 ? t('tour_done') : t('next');
+	const card = $('tourCard'), cw = 340, ch = card.offsetHeight || 170, W = innerWidth, H = innerHeight;
+	let left = r.right + 16, top = r.top;
+	if (left + cw > W - 12) { left = Math.max(12, Math.min(W - cw - 12, r.left)); top = r.bottom + 16; }
+	if (top + ch > H - 12) top = Math.max(12, r.top - ch - 16);
+	Object.assign(card.style, { left: `${left}px`, top: `${top}px` });
+}
+
+function maybeTour() {
+	if (ui.settings.welcomed && !ui.settings.tourDone && ui.tourStep == null && !$('mainView').classList.contains('hidden')) setTimeout(startTour, 600);
+}
+
+$('welcomeStart').addEventListener('click', () => { $('welcomeModal').classList.add('hidden'); saveSetting({ welcomed: true }).then(maybeTour); });
+$('welcomeGithub').addEventListener('click', () => openExt(GITHUB_URL));
+$('welcomeSupport').addEventListener('click', () => openSupport());
+$('tourNext').addEventListener('click', () => { ui.tourStep++; showTourStep(); });
+$('tourSkip').addEventListener('click', endTour);
+$('settingsTour').addEventListener('click', () => { $('settingsModal').classList.add('hidden'); startTour(); });
+$('settingsAbout').addEventListener('click', () => { $('settingsModal').classList.add('hidden'); if (window.desktop) window.desktop.version().then(v => { $('welcomeVersion').textContent = v; }); $('welcomeModal').classList.remove('hidden'); });
+window.addEventListener('resize', () => { if (ui.tourStep != null) showTourStep(); });
 
 // ============================================================ поддержка разработчика
 const openExt = url => { if (window.desktop && window.desktop.openExternal) window.desktop.openExternal(url); else window.open(url, '_blank'); };
@@ -1338,21 +1627,25 @@ async function openSupport() {
 }
 
 // Мягкое напоминание после полезного действия: не чаще раза в 3 дня, отключается в настройках.
+// Напоминание о поддержке — только после успешной перекладки, не чаще раза в сутки,
+// с галочкой «больше не показывать» (вернуть можно в настройках).
 function nudgeSupport(reasonText) {
 	const st = ui.settings || {};
-	if (st.supportHideNudges || Date.now() - (st.supportNudgeAt || 0) < 3 * 86400e3) return;
-	ui.settings.supportNudgeAt = Date.now();
-	api('/api/settings', { supportNudgeAt: ui.settings.supportNudgeAt }).catch(() => {});
+	if (st.supportHideNudges || Date.now() - (st.supportNudgeAt || 0) < 86400e3) return;
+	saveSetting({ supportNudgeAt: Date.now() });
 	const el = document.createElement('div');
-	el.className = 'toast good';
-	el.innerHTML = `${esc(reasonText)} <button class="btn support-btn small" style="margin-left:10px">♥ ${esc(t('support_short'))}</button><button class="nudge-x" title="${esc(t('close'))}">×</button>`;
-	el.querySelector('.support-btn').onclick = () => { el.remove(); openSupport(); };
-	el.querySelector('.nudge-x').onclick = () => el.remove();
+	el.className = 'toast good nudge';
+	el.innerHTML = `<div>${esc(reasonText)}</div>
+		<div class="nudge-row"><button class="btn support-btn small">♥ ${esc(t('support_short'))}</button>
+		<label class="check small"><input type="checkbox"> <span>${esc(t('dont_show_again'))}</span></label>
+		<button class="nudge-x" title="${esc(t('close'))}">×</button></div>`;
+	const close = () => { if (el.querySelector('input').checked) saveSetting({ supportHideNudges: true }); el.remove(); };
+	el.querySelector('.support-btn').onclick = () => { close(); openSupport(); };
+	el.querySelector('.nudge-x').onclick = close;
 	$('toasts').appendChild(el);
-	setTimeout(() => el.remove(), 15000);
+	setTimeout(() => { if (el.isConnected) close(); }, 20000);
 }
 
-$('supportBtn').addEventListener('click', openSupport);
 $('loginSupport').addEventListener('click', openSupport);
 $('settingsSupport').addEventListener('click', () => { $('settingsModal').classList.add('hidden'); openSupport(); });
 $('supportClose').addEventListener('click', () => $('supportModal').classList.add('hidden'));
@@ -1361,7 +1654,7 @@ $('supportList').addEventListener('click', e => {
 	if (b.dataset.open) openExt(b.dataset.open);
 	if (b.dataset.copy) copyText(b.dataset.copy);
 });
-$('nudgeOff').addEventListener('change', async e => { try { ui.settings = await api('/api/settings', { supportHideNudges: e.target.checked }); } catch (err) { toast(err.message, 'bad'); } });
+
 
 // ============================================================ наклейки
 async function loadStickers() {
@@ -1390,13 +1683,34 @@ function renderStickers() {
 	}).join('') : `<div class="empty-box">${esc(t('st_no_weapons'))}</div>`;
 }
 
-async function stickerAct(url, body, msg, ask) {
+async function stickerAct(url, body, msg) {
 	if (ui.stkBusy) return;
-	if (ask && !confirm(ask)) return;
 	ui.stkBusy = true;
-	try { await apiPost(url, body); toast(msg, 'good'); await loadStickers(); }
+	$('stHint').textContent = t('st_working');
+	try { await apiPost(url, body); toast(msg, 'good'); }
 	catch (e) { toast(e.message, 'bad'); }
-	finally { ui.stkBusy = false; }
+	finally { ui.stkBusy = false; await loadStickers(); }  // сразу показываем результат на оружии
+}
+
+async function stickerApply(weaponId, slot) {
+	const sel = ui.stk.stickers.find(s => s.stickerId === ui.stkSel); if (!sel) return;
+	const w = ui.stk.weapons.find(x => x.id === weaponId);
+	if (ui.settings.stickerConfirm !== false) {
+		const img = src => src ? `<img src="${esc(src)}" alt="">` : '';
+		const r = await miniConfirm({
+			title: t('st_apply_title'), text: t('st_apply_confirm', { name: sel.name, weapon: w ? w.name : '' }),
+			extra: sel.image || (w && w.image) ? `<div class="mini-preview">${img(sel.image)}<span class="arrow">→</span>${img(w && w.image)}</div>` : '',
+			ok: t('st_put'), dontShow: true,
+		});
+		if (!r.ok) return;
+		if (r.dont) saveSetting({ stickerConfirm: false });
+	}
+	await stickerAct('/api/stickers/apply', { weaponId, stickerItemId: sel.ids[0], slot }, t('st_applied'));
+}
+
+async function stickerRemove(weaponId, slot) {
+	const r = await miniConfirm({ warn: true, title: t('st_remove_title'), text: t('st_remove_confirm'), ok: t('delete') });
+	if (r.ok) await stickerAct('/api/stickers/scrape', { weaponId, slot, remove: true }, t('st_removed'));
 }
 
 $('stRefresh').addEventListener('click', loadStickers);
@@ -1404,13 +1718,9 @@ $('stSearch').addEventListener('input', renderStickers);
 $('stStickers').addEventListener('click', e => { const s = e.target.closest('[data-stk]'); if (s) { const id = Number(s.dataset.stk); ui.stkSel = ui.stkSel === id ? null : id; renderStickers(); } });
 $('stWeapons').addEventListener('click', e => {
 	const d = e.target.dataset;
-	if (d.put) {
-		const sel = ui.stk.stickers.find(s => s.stickerId === ui.stkSel); if (!sel) return;
-		const w = ui.stk.weapons.find(x => x.id === d.put);
-		stickerAct('/api/stickers/apply', { weaponId: d.put, stickerItemId: sel.ids[0], slot: Number(d.slot) }, t('st_applied'), t('st_apply_confirm', { name: sel.name, weapon: w ? w.name : '' }));
-	}
+	if (d.put) stickerApply(d.put, Number(d.slot));
 	if (d.scrape) stickerAct('/api/stickers/scrape', { weaponId: d.scrape, slot: Number(d.slot) }, t('st_scraped'));
-	if (d.remove) stickerAct('/api/stickers/scrape', { weaponId: d.remove, slot: Number(d.slot), remove: true }, t('st_removed'), t('st_remove_confirm'));
+	if (d.remove) stickerRemove(d.remove, Number(d.slot));
 });
 
 // ============================================================ Armory
@@ -1446,12 +1756,11 @@ function renderArmory() {
 async function armRedeem(rid) {
 	const i = ui.armory.items.find(x => x.redeemId === rid); if (!i) return;
 	const q = ui.armQty[rid] || 1;
-	if (!confirm(t('arm_confirm', { name: i.name, n: q, cost: i.points * q }))) return;
+	if (!(await miniConfirm({ title: 'Armory', text: t('arm_confirm', { name: i.name, n: q, cost: i.points * q }) })).ok) return;
 	document.querySelectorAll('[data-redeem]').forEach(b => { b.disabled = true; });
 	try {
 		const r = await apiPost('/api/armory/redeem', { redeemId: rid, count: q });
 		toast(t('arm_done', { name: r.name, n: r.redeemed }), 'good');
-		setTimeout(() => nudgeSupport(t('nudge_generic')), 1500);
 		ui.armory.balance = r.balance;
 		loadState().catch(() => {});
 	} catch (e) { toast(e.message, 'bad'); }
@@ -1543,12 +1852,23 @@ $('rulesClose').addEventListener('click', async () => { try { await saveRules();
 // ============================================================ старт
 fillLangSelects();
 applyStaticI18n();
-$('donateLink').addEventListener('click', e => { e.preventDefault(); openSupport(); });
+
 if (window.desktop) {
 	window.desktop.version().then(v => { $('versionText').textContent = t('version', { v }); });
 	if (window.desktop.onUpdate) window.desktop.onUpdate(u => {
-		const action = u.ready ? { label: t('update_restart'), run: () => window.desktop.installUpdate() } : { label: t('update_download'), run: () => openExt(u.url) };
-		toast(t(u.ready ? 'update_ready' : 'update_available', { v: u.version }), 'good', action);
+		const el = document.createElement('div');
+		el.className = 'toast good nudge';
+		el.innerHTML = `<div>${esc(t(u.ready ? 'update_ready' : 'update_available', { v: u.version }))}</div>
+			<div class="nudge-row"><button class="btn primary small" data-u="go">${esc(t(u.ready ? 'update_restart' : 'update_download'))}</button>
+			<button class="heart-mini" data-u="heart" title="${esc(t('support_title'))}"><svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2Z" fill="currentColor"/></svg></button>
+			<button class="nudge-x" data-u="x">×</button></div>`;
+		el.addEventListener('click', e => {
+			const k = e.target.closest('[data-u]'); if (!k) return;
+			if (k.dataset.u === 'go') u.ready ? window.desktop.installUpdate() : openExt(u.url);
+			if (k.dataset.u === 'heart') openSupport();
+			if (k.dataset.u === 'x') el.remove();
+		});
+		$('toasts').appendChild(el);
 	});
 }
 setMode('qr');

@@ -197,4 +197,15 @@ async function refreshStoreMeta(force = false) {
 	return { updated: true };
 }
 
-module.exports = { loadMap, refresh, BUNDLED, FILES, storeMeta, refreshStoreMeta, buildStoreMeta, META_SOURCES };
+// Способы поддержки: скачанная версия (из репозитория) важнее встроенной, но пустые поля не затирают заполненные.
+function loadSupport() {
+	const read = dir => { try { return JSON.parse(fs.readFileSync(path.join(dir, 'support.json'), 'utf8')); } catch (e) { return {}; } };
+	const out = read(BUNDLED);
+	const remote = cacheDir() ? read(cacheDir()) : {};
+	for (const [k, v] of Object.entries(remote)) {
+		if (Array.isArray(v) ? v.some(x => x && (x.address || x.url)) : Boolean(v)) out[k] = v;
+	}
+	return out;
+}
+
+module.exports = { loadSupport, loadMap, refresh, BUNDLED, FILES, storeMeta, refreshStoreMeta, buildStoreMeta, META_SOURCES };

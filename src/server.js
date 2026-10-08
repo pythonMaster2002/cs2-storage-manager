@@ -10,6 +10,7 @@ const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
 const QRCode = require('qrcode');
+const SteamUser = require('steam-user');
 const { CasketSession, AccountStore, humanError } = require('./core/session');
 
 class Manager {
@@ -32,17 +33,17 @@ class Manager {
 	// Настройки всего приложения (не аккаунта): быстрая покупка, избранное магазина.
 	// Хранятся на диске, а не в localStorage — порт сервера (и origin страницы) меняется при каждом запуске.
 	settings() {
-		const def = { fastBuy: false, favorites: [], autoAcceptGifts: false, rules: [], autoApplyRules: false, supportNudgeAt: 0, supportHideNudges: false };
+		const def = { favorites: [], autoAcceptGifts: false, rules: [], autoApplyRules: false, supportNudgeAt: 0, supportHideNudges: false, stickerConfirm: true, welcomed: false, tourDone: false };
 		try { return { ...def, ...JSON.parse(fs.readFileSync(this.settingsFile, 'utf8')) }; } catch (e) { return def; }
 	}
 
 	saveSettings(patch) {
 		const cur = this.settings();
-		if ('fastBuy' in patch) cur.fastBuy = Boolean(patch.fastBuy);
 		if ('autoAcceptGifts' in patch) cur.autoAcceptGifts = Boolean(patch.autoAcceptGifts);
 		if ('autoApplyRules' in patch) cur.autoApplyRules = Boolean(patch.autoApplyRules);
 		if ('supportNudgeAt' in patch) cur.supportNudgeAt = Number(patch.supportNudgeAt) || 0;
 		if ('supportHideNudges' in patch) cur.supportHideNudges = Boolean(patch.supportHideNudges);
+		for (const k of ['stickerConfirm', 'welcomed', 'tourDone']) if (k in patch) cur[k] = Boolean(patch[k]);
 		if (Array.isArray(patch.rules)) {
 			const kinds = ['any', 'container', 'sticker', 'skin', 'knifeglove', 'graffiti', 'other'];
 			cur.rules = patch.rules.slice(0, 50).map(r => ({
@@ -113,6 +114,8 @@ class Manager {
 	brief(session) {
 		return {
 			login: session.login, status: session.status, error: session.error,
+			wallet: session.user && session.user.wallet && session.user.wallet.hasWallet ? { balance: session.user.wallet.balance, currency: SteamUser.ECurrencyCode[session.user.wallet.currency] } : null,
+			proxyBad: Boolean(this.guard && session.proxy && this.guard.proxy.get(session.login) && !this.guard.proxy.get(session.login).ok),
 			personaName: session.profile ? session.profile.name : null, avatar: session.profile ? session.profile.avatar : null,
 			needsRelogin: session.needsRelogin, proxy: session.proxy || '', canConfirm: Boolean(session.identitySecret),
 			job: session.job, pendingTxn: session.pendingTxn ? { txnId: session.pendingTxn.txnId, name: session.pendingTxn.name } : null,
@@ -148,7 +151,7 @@ function start({ dataDir, secretBox, exportDir }) {
 			guardDomain: p.guardDomain, guardWrong: p.guardWrong,
 			qr: p.status === 'qr' && p.qrUrl ? await QRCode.toDataURL(p.qrUrl, { margin: 1, width: 280 }) : null,
 		} : null;
-		return { accounts, pending, log: mgr.logLines.slice(-25) };
+		return { accounts, pending, log: mgr.logLines.slice(-25), alerts: mgr.guard ? mgr.guard.alerts.slice(-10) : [] };
 	}));
 
 	app.get('/api/accounts', handle(() => mgr.store.list()));
@@ -186,7 +189,16 @@ function start({ dataDir, secretBox, exportDir }) {
 	}));
 
 	app.get('/api/state', handle(req => pick(req).snapshot()));
-	app.get('/api/overview', handle(req => pick(req).overview()));
+	app.get('/api/overview', handle(async req => pick(req).overview()));
+	// Сводка по всем подключённым аккаунтам.
+	app.get('/api/overview/all', handle(async () => {
+		const out = [];
+		for (const s of mgr.sessions.values()) {
+			if (s.status !== 'online') { out.push({ login: s.login, offline: true }); continue; }
+			try { out.push(await s.overview()); } catch (e) { out.push({ login: s.login, error: e.message }); }
+		}
+		return out;
+	}));
 	app.get('/api/casket/:id', handle(req => pick(req).casketContents(req.params.id)));
 
 	// items: [{name, count}] -> конкретные id предметов
@@ -223,8 +235,31 @@ function start({ dataDir, secretBox, exportDir }) {
 	}));
 
 	app.get('/api/settings', handle(() => mgr.settings()));
+
+	// ---------------------------------------------------------------- Steam Guard (мини-SDA) и контроль прокси
+	const { Guard } = require('./core/guard');
+	const guard = mgr.guard = new Guard(mgr);
+	guard.startProxyMonitor();
+	app.get('/api/guard/accounts', handle(() => guard.accounts()));
+	app.get('/api/guard/codes', handle(() => guard.codes()));
+	app.post('/api/guard/mafile', handle(req => {
+		const r = guard.attachMaFile(String(req.body.login || ''), req.body.maFile);
+		mgr.log(`${req.body.login}: добавлен maFile`);
+		return r;
+	}));
+	app.get('/api/guard/confirmations', handle(req => guard.confirmations(String(req.query.login || ''))));
+	app.post('/api/guard/confirmations', handle(async req => {
+		const r = await guard.respond(String(req.body.login || ''), req.body.ids, req.body.accept);
+		mgr.history({ login: req.body.login, action: req.body.accept ? 'confirm' : 'deny', count: r.count });
+		return r;
+	}));
+	app.post('/api/guard/proxycheck', handle(async req => {
+		const a = guard.accounts().find(x => x.login === req.body.login);
+		if (!a || !a.proxy) throw new Error('у аккаунта нет прокси');
+		return guard.checkProxy(a.login, a.proxy);
+	}));
 	// Способы поддержать разработчика (src/data/support.json, обновляется вместе с картами) + QR для адресов.
-	app.get('/api/support', handle(() => require('./core/catalog').loadMap('support.json')));
+	app.get('/api/support', handle(() => require('./core/catalog').loadSupport()));
 	app.get('/api/qr', handle(async req => ({ dataUrl: await QRCode.toDataURL(String(req.query.text || '').slice(0, 300), { margin: 1, width: 220 }) })));
 	app.get('/api/rules/plan', handle(req => pick(req).planRules(mgr.settings().rules)));
 	app.post('/api/rules/apply', handle(async req => {
@@ -237,7 +272,7 @@ function start({ dataDir, secretBox, exportDir }) {
 
 	// ---------------------------------------------------------------- наклейки на оружии
 	const workshop = require('./core/workshop');
-	app.get('/api/stickers', handle(req => workshop.state(pick(req))));
+	app.get('/api/stickers', handle(async req => workshop.state(pick(req))));
 	app.post('/api/stickers/apply', handle(async req => {
 		const s = pick(req);
 		const r = await workshop.apply(s, req.body.weaponId, req.body.stickerItemId, req.body.slot);

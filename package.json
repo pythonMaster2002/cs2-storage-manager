@@ -1,6 +1,6 @@
 {
   "name": "caskit",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Caskit — free and open-source CS2 Storage Unit manager: fast transfers, store, trade-ups, trades, market, Armory.",
   "main": "main.js",
   "scripts": {

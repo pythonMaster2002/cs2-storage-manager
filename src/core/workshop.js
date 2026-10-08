@@ -15,13 +15,32 @@ const IMAGES = cat.loadMap('images.json');
 
 const stickerName = id => NAMES[`sticker:${id}`] || `Sticker #${id}`;
 const stickerImage = id => { const t = IMAGES.images && IMAGES.images[`sticker:${id}`]; return t ? `${IMAGES.cdn}${t}/96fx96f` : null; };
-const isWeapon = it => !it.casket_id && it.def_index > 0 && it.def_index < 100;
+const isWeapon = it => !it.casket_id && it.def_index > 0 && it.def_index < 100
+	&& BigInt(it.id) < 0xF000000000000000n && it.origin !== 18;  // 18 = предмет-превью (не ваш)
 
-function state(session) {
+// Реальные id предметов из инвентаря Steam (контексты 2 и 16 — обычные и защищённые после обмена).
+// GC иногда держит предметы, которых у игрока нет (превью, X-Ray и т.п.) — сверяемся с сайтом.
+async function webAssetIds(session) {
+	if (session._webAssets && Date.now() - session._webAssets.ts < 60000) return session._webAssets.set;
+	if (!session.webCookies) return null;
+	const set = new Set();
+	try {
+		for (const ctx of [2, 16]) {
+			const res = await session.webRequest('GET', `https://steamcommunity.com/inventory/${session.user.steamID.getSteamID64()}/730/${ctx}?l=english&count=2000`);
+			if (res.status !== 200) { if (ctx === 2) return null; continue; }
+			for (const a of JSON.parse(res.body).assets || []) set.add(String(a.assetid));
+		}
+	} catch (e) { return null; }
+	session._webAssets = { ts: Date.now(), set };
+	return set;
+}
+
+async function state(session) {
 	session.ensureOnline();
 	const { itemName, itemImage } = require('./session');
 	const inv = session.csgo.inventory;
-	const weapons = inv.filter(isWeapon).map(w => ({
+	const real = await webAssetIds(session);
+	const weapons = inv.filter(isWeapon).filter(w => !real || real.has(String(w.id))).map(w => ({
 		id: String(w.id), name: itemName(w), image: itemImage(w),
 		stickers: (w.stickers || []).map(s => ({ slot: s.slot, id: s.sticker_id, name: stickerName(s.sticker_id), image: stickerImage(s.sticker_id), wear: s.wear || 0 })),
 	})).sort((a, b) => b.stickers.length - a.stickers.length || a.name.localeCompare(b.name));
@@ -50,10 +69,18 @@ function send(session, msg, wearTarget) {
 // Ждём, пока GC обновит предмет (стикеры на оружии меняются через SO_Update).
 async function waitChange(session, weaponId, check, ms = 15000) {
 	const deadline = Date.now() + ms;
+	const orig = session.csgo.inventory.find(i => String(i.id) === String(weaponId));
+	const before = new Set(session.csgo.inventory.map(i => String(i.id)));
 	while (Date.now() < deadline) {
 		await sleep(300);
 		const w = session.csgo.inventory.find(i => String(i.id) === String(weaponId));
 		if (w && check(w)) return w;
+		// предмет мог прийти с новым id — ищем «тот же» оружейный предмет среди новых
+		if (orig) {
+			const fresh = session.csgo.inventory.find(i => !before.has(String(i.id)) && i.def_index === orig.def_index
+				&& Math.round(i.paint_index || 0) === Math.round(orig.paint_index || 0) && (i.paint_seed || 0) === (orig.paint_seed || 0));
+			if (fresh && check(fresh)) { session._webAssets = null; return fresh; }
+		}
 	}
 	return null;
 }
@@ -70,7 +97,7 @@ async function apply(session, weaponId, stickerItemId, slot) {
 	send(session, { sticker_item_id: String(stickerItemId), item_item_id: String(w.id), sticker_slot: Number(slot) });
 	const ok = await waitChange(session, w.id, x => (x.stickers || []).some(s => s.slot === Number(slot)));
 	if (!ok) throw new Error('GC не применил наклейку — попробуйте ещё раз');
-	return { ok: true, slot: Number(slot) };
+	return { ok: true, slot: Number(slot), weaponId: String(ok.id) };
 }
 
 async function scrape(session, weaponId, slot, remove) {
