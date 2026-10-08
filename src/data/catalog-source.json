@@ -1,0 +1,4 @@
+{
+  "_comment": "dataUrl — папка с актуальными images.json/names.json/store_defs.json/nonstorable_defs.json (например, raw.githubusercontent.com/<user>/<repo>/main/src/data). Пусто — иконки и имена берутся только из комплекта. Мейнтейнер обновляет карты через tools/build_names.py и пушит в репозиторий — у всех пользователей иконки обновятся сами, без новой версии приложения.",
+  "dataUrl": "https://raw.githubusercontent.com/pythonMaster2002/cs2-storage-manager/main/src/data"
+}

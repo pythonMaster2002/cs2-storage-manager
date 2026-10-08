@@ -1,0 +1,38 @@
+# Сборка и публикация релиза: git tag v0.5.0 && git push --tags
+# Собирает Windows (установщик + portable), macOS (dmg + zip, Intel и Apple Silicon) и Linux (AppImage + deb)
+# и выкладывает всё в GitHub Releases. Оттуда же приложение берёт автообновления.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: --win nsis portable --x64 -c.win.signAndEditExecutable=true
+          - os: macos-latest
+            args: --mac dmg zip --x64 --arm64
+          - os: ubuntu-latest
+            args: --linux AppImage deb --x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build and publish
+        run: npx electron-builder ${{ matrix.args }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'   # без платной подписи Apple; см. README про первый запуск на macOS

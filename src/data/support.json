@@ -1,0 +1,17 @@
+{
+  "_comment": "Способы поддержать разработчика. Пустое значение — способ скрыт. Файл можно обновлять в репозитории: приложение подтянет новую версию само (catalog.refresh, dataUrl).",
+  "kofi": "https://ko-fi.com/mikidjus",
+  "steamTrade": "https://steamcommunity.com/tradeoffer/new/?partner=146040317&token=Q_pa1oMK",
+  "binancePayId": "",
+  "crypto": [
+    {
+      "label": "USDT · TRC20 (Tron)",
+      "address": ""
+    },
+    {
+      "label": "USDT · BEP20 (BNB Smart Chain)",
+      "address": ""
+    }
+  ],
+  "github": "https://github.com/pythonMaster2002/cs2-storage-manager"
+}

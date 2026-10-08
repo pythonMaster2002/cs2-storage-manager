@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caskit</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============================================================ вход -->
+<section id="loginView" class="view hidden">
+	<div class="login-topbar">
+		<button class="btn ghost small hidden" id="loginBack" data-i18n="back">Назад</button>
+		<span class="spacer"></span>
+		<button class="btn support-btn small" id="loginSupport"><span data-i18n="support_short">Поддержать</span></button>
+		<label class="lang-pick"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><select id="langSelect"></select></label>
+	</div>
+	<div class="login-wrap">
+		<div class="brand-block">
+			<div class="logo">
+				<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5v-9Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3 7.5 12 12l9-4.5M12 12v9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+			</div>
+			<h1>Caskit</h1>
+			<p class="muted" data-i18n="tagline">Бесплатный и быстрый менеджер ящиков CS2</p>
+		</div>
+
+		<div class="card login-card">
+			<div id="savedBlock" class="hidden">
+				<div class="section-title" data-i18n="saved_accounts">Сохранённые аккаунты</div>
+				<div id="savedList" class="saved-list"></div>
+				<div class="divider"><span data-i18n="or_login_again">или войдите заново</span></div>
+			</div>
+
+			<div class="segmented" role="tablist">
+				<button data-mode="qr" class="active" data-i18n="tab_qr">QR-код</button>
+				<button data-mode="creds" data-i18n="tab_creds">Логин и пароль</button>
+				<button data-mode="mafile" data-i18n="tab_mafile">maFile</button>
+			</div>
+
+			<div data-pane="qr">
+				<div class="qr-box">
+					<div id="qrPlaceholder" class="qr-placeholder">
+						<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM14 18h2v2h-2zM18 14h2v2h-2z" fill="currentColor"/></svg>
+					</div>
+					<img id="qrImg" class="hidden" alt="QR">
+				</div>
+				<p class="hint" data-i18n="qr_hint">Откройте приложение Steam на телефоне → Steam Guard → значок QR и отсканируйте код.</p>
+			</div>
+
+			<div data-pane="creds" class="hidden">
+				<label><span data-i18n="field_login">Логин</span><input id="crLogin" autocomplete="username" spellcheck="false"></label>
+				<label><span data-i18n="field_password">Пароль</span><input id="crPassword" type="password" autocomplete="current-password"></label>
+			</div>
+
+			<div data-pane="mafile" class="hidden">
+				<label class="dropzone" id="dropzone">
+					<input id="maFileInput" type="file" accept=".maFile,.json,application/json" hidden>
+					<span id="dropText" data-i18n="mafile_drop">Перетащите maFile сюда или нажмите, чтобы выбрать</span>
+				</label>
+				<label><span data-i18n="field_login">Логин</span><input id="maLogin" autocomplete="username" spellcheck="false" data-i18n-ph="mafile_login_ph"></label>
+				<label><span data-i18n="field_password">Пароль</span><input id="maPassword" type="password" autocomplete="current-password"></label>
+				<p class="hint" data-i18n="mafile_hint">Коды Steam Guard будут подставляться автоматически.</p>
+			</div>
+
+			<label><span data-i18n="proxy_label">Прокси</span> <span class="muted" data-i18n="proxy_note">(SOCKS5 или HTTP, необязательно)</span>
+				<input id="proxy" spellcheck="false" data-i18n-ph="proxy_ph"></label>
+			<p class="hint" data-i18n="proxy_hint">Если прокси задан — весь трафик идёт только через него.</p>
+			<label class="check"><input id="remember" type="checkbox" checked> <span data-i18n="remember">Запомнить аккаунт на этом компьютере</span></label>
+
+			<button id="loginBtn" class="btn primary block" data-i18n="btn_login">Войти</button>
+			<p id="loginError" class="error-text hidden"></p>
+		</div>
+		<p class="footnote" data-i18n="login_footnote">Пароль не сохраняется. Данные входа хранятся только на этом компьютере в зашифрованном виде.</p>
+	</div>
+</section>
+
+<!-- ============================================================ подключение -->
+<section id="connectingView" class="view hidden">
+	<div class="center-stack">
+		<div class="spinner big"></div>
+		<h2 id="connectingTitle" data-i18n="connecting">Подключаемся к Steam…</h2>
+		<p class="muted" id="connectingHint" data-i18n="connecting_hint">Это занимает несколько секунд</p>
+		<button class="btn ghost" id="cancelLoginBtn" data-i18n="btn_cancel">Отменить</button>
+	</div>
+</section>
+
+<!-- ============================================================ основной экран -->
+<section id="mainView" class="view hidden">
+	<header class="topbar">
+		<div class="brand-mini">
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5v-9Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3 7.5 12 12l9-4.5M12 12v9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+			<span>Caskit</span>
+		</div>
+		<div class="segmented topnav" id="topnav">
+			<button data-tab="overview" data-i18n="tab_overview">Обзор</button>
+			<button data-tab="caskets" class="active" data-i18n="tab_caskets">Ящики</button>
+			<button data-tab="store" data-i18n="tab_store">Магазин</button>
+			<button data-tab="tradeup" data-i18n="tab_tradeup">Контракт</button>
+			<button data-tab="armory" data-i18n="tab_armory">Armory</button>
+			<button data-tab="stickers" data-i18n="tab_stickers">Наклейки</button>
+			<button data-tab="trades" data-i18n="tab_trades">Трейды</button>
+			<button data-tab="market" data-i18n="tab_market">Маркет</button>
+		</div>
+		<div class="meter-block" title="" data-i18n-title="inventory">
+			<div class="meter-label"><span data-i18n="inventory">Инвентарь</span><span id="invMeterText"></span></div>
+			<div class="meter"><i id="invMeter"></i></div>
+		</div>
+		<div class="spacer"></div>
+		<label class="lang-pick mini"><select id="langSelect2"></select></label>
+		<button class="btn ghost icon-btn" id="refreshBtn" data-i18n-title="refresh" title="Обновить">
+			<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+		</button>
+		<button class="btn ghost" id="exportBtn" data-i18n="export">Экспорт</button>
+		<button class="btn support-btn" id="supportBtn" data-i18n-title="support_title" title="Поддержать разработчика"><svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2Z" fill="currentColor"/></svg><span data-i18n="support_short">Поддержать</span></button>
+		<button class="btn ghost icon-btn" id="settingsBtn" data-i18n-title="settings" title="Настройки">
+			<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+		</button>
+	</header>
+
+	<!-- переключатель аккаунтов -->
+	<div class="account-bar" id="accountBar"></div>
+
+	<!-- прогресс перекладки: всегда на видном месте -->
+	<div id="jobBanner" class="job-banner hidden">
+		<div class="job-icon" id="jobIcon"><div class="spinner"></div></div>
+		<div class="job-body">
+			<div class="job-title"><span id="jobTitle"></span><span id="jobNumbers" class="job-numbers"></span></div>
+			<div class="progress"><i id="jobBar"></i></div>
+			<div class="job-sub muted small" id="jobSub"></div>
+		</div>
+		<button class="btn danger-ghost" id="jobStop" data-i18n="job_stop">Остановить</button>
+		<button class="btn ghost hidden" id="jobClose" data-i18n="job_done">Готово</button>
+	</div>
+
+	<section id="overviewView" class="overview-view hidden">
+		<div class="ov-tiles">
+			<div class="ov-tile">
+				<div class="ov-tile-h"><span data-i18n="ov_total">Всего предметов</span></div>
+				<div class="ov-tile-v" id="ovTotal">—</div>
+				<div class="ov-tile-s muted small" id="ovTotalSub"></div>
+			</div>
+			<div class="ov-tile">
+				<div class="ov-tile-h"><span data-i18n="inventory">Инвентарь</span><span id="ovInvNum" class="muted small"></span></div>
+				<div class="ov-tile-v" id="ovInv">—</div>
+				<div class="meter"><i id="ovInvMeter"></i></div>
+			</div>
+			<div class="ov-tile">
+				<div class="ov-tile-h"><span data-i18n="ov_storage">Склады</span><span id="ovStNum" class="muted small"></span></div>
+				<div class="ov-tile-v" id="ovStored">—</div>
+				<div class="meter"><i id="ovStMeter"></i></div>
+			</div>
+		</div>
+		<div class="ov-charts">
+			<div class="card ov-card">
+				<div class="section-title" data-i18n="ov_by_rarity">По редкости</div>
+				<div id="ovRarity" class="ov-bars"></div>
+			</div>
+			<div class="card ov-card">
+				<div class="section-title" data-i18n="ov_by_kind">По виду</div>
+				<div id="ovKind" class="ov-bars"></div>
+			</div>
+		</div>
+	</section>
+
+	<div class="layout" id="casketsView">
+		<aside class="sidebar">
+			<div class="sidebar-head">
+				<div class="section-title"><span data-i18n="caskets">Ящики</span> <span id="casketCount" class="badge"></span></div>
+				<label class="check small"><input id="showFull" type="checkbox"> <span data-i18n="show_full">Показывать полные</span></label>
+			</div>
+			<div id="casketList" class="casket-list"></div>
+			<div class="sidebar-foot">
+				<button class="btn ghost block" id="rulesBtn" data-i18n="rules_btn">Правила перекладки</button>
+				<button class="btn ghost block" id="buyBtn" data-i18n="buy_container">Купить контейнер</button>
+				<a id="donateLink" class="donate" href="#" data-i18n="donate">♥ Поддержать проект</a>
+				<div class="muted small" id="versionText"></div>
+			</div>
+		</aside>
+
+		<main class="content">
+			<div id="emptyState" class="empty-state">
+				<div class="empty-icon">
+					<svg viewBox="0 0 24 24"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5v-9Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M3 7.5 12 12l9-4.5M12 12v9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+				</div>
+				<h2 data-i18n="select_casket">Выберите ящик слева</h2>
+				<p class="muted" id="emptyStats"></p>
+			</div>
+
+			<div id="casketPanel" class="hidden">
+				<div class="casket-head">
+					<div>
+						<div class="casket-title"><span id="casketTitle"></span>
+							<button class="btn ghost small" id="renameBtn" data-i18n="rename">Переименовать</button>
+						</div>
+						<div class="casket-fill"><div class="meter wide"><i id="casketMeter"></i></div><span id="casketFillText" class="muted small"></span></div>
+					</div>
+					<div class="segmented big" id="modeSwitch">
+						<button data-op="store" class="active" data-i18n="op_store">Положить в ящик</button>
+						<button data-op="take" data-i18n="op_take">Забрать из ящика</button>
+					</div>
+				</div>
+
+				<div id="renameRow" class="rename-row hidden">
+					<input id="renameInput" maxlength="20" data-i18n-ph="rename_ph" placeholder="Новое имя ящика">
+					<button class="btn primary" id="renameSave" data-i18n="save">Сохранить</button>
+					<button class="btn ghost" id="renameCancel" data-i18n="cancel">Отмена</button>
+				</div>
+
+				<div class="toolbar">
+					<div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+						<input id="search" data-i18n-ph="search_item" placeholder="Поиск предмета" spellcheck="false"></div>
+					<button class="chip" id="onlyCases" data-i18n="only_cases">Только кейсы</button>
+					<span class="spacer"></span>
+					<button class="btn ghost small" id="selectAll" data-i18n="select_all">Выбрать всё</button>
+					<button class="btn ghost small" id="clearSel" data-i18n="clear">Сбросить</button>
+				</div>
+
+				<div id="itemList" class="item-list"></div>
+
+				<div class="action-bar">
+					<div><span class="strong" id="selCount">0</span> <span class="muted" id="selHint"></span></div>
+					<span id="selWarn" class="warn-text"></span>
+					<button class="btn primary big" id="actionBtn" disabled></button>
+				</div>
+			</div>
+		</main>
+	</div>
+
+	<section id="storeView" class="store-view hidden">
+		<div class="store-head">
+			<div>
+				<div class="section-title" data-i18n="store_title">Магазин CS2</div>
+				<div class="muted small" id="storeWallet"></div>
+			</div>
+			<div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+				<input id="storeSearch" data-i18n-ph="search_product" placeholder="Поиск товара" spellcheck="false"></div>
+			<div class="spacer"></div>
+			<span id="fastBadge" class="badge fast hidden" data-i18n="fast_on">Быстрая покупка</span>
+			<button class="btn ghost" id="cartReset" data-i18n="cart_reset">Сбросить</button>
+			<button class="btn cart-btn" id="cartBtn" disabled>
+				<svg viewBox="0 0 24 24"><path d="M3 4h2.2l2.2 11h10.4l2-8H6.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9.5" cy="19.5" r="1.4" fill="currentColor"/><circle cx="17" cy="19.5" r="1.4" fill="currentColor"/></svg>
+				<span class="cart-meta"><b id="cartCount">0</b><span id="cartTotal">0</span></span>
+				<span data-i18n="checkout">Оформить</span>
+			</button>
+		</div>
+		<div id="storeGrid" class="store-grid"></div>
+	</section>
+
+	<section id="tradeupView" class="tradeup-view hidden">
+		<div class="tradeup-head">
+			<div>
+				<div class="section-title" data-i18n="tradeup_title">Контракт обмена</div>
+				<div class="muted small" data-i18n="tradeup_hint">Выберите 10 скинов одной редкости — получите 1 скин рангом выше. Предметы расходуются безвозвратно.</div>
+			</div>
+			<label class="check tu-caskets"><input type="checkbox" id="tuCaskets"> <span data-i18n="tradeup_caskets">Загрузить из ящиков</span></label>
+		</div>
+		<div class="tradeup-body">
+			<aside class="tradeup-groups" id="tuGroups"></aside>
+			<main class="tradeup-pick">
+				<div id="tuEmpty" class="empty-state" style="margin-top:40px"><p class="muted" data-i18n="tradeup_pick_group">Выберите группу редкости слева</p></div>
+				<div id="tuPanel" class="hidden">
+					<div class="tradeup-pickhead"><span id="tuGroupName" class="strong"></span></div>
+					<div id="tuItems" class="item-list"></div>
+				</div>
+			</main>
+		</div>
+		<div class="action-bar">
+			<div><span class="strong" id="tuCount">0</span> <span class="muted">/ 10</span></div>
+			<span id="tuWarn" class="warn-text"></span>
+			<button class="btn primary big" id="tuDo" disabled data-i18n="tradeup_do">Собрать контракт</button>
+		</div>
+	</section>
+
+	<!-- ---------------------------------------------------------------- наклейки -->
+	<section id="stickersView" class="pane-view hidden">
+		<div class="pane-head">
+			<div class="section-title" data-i18n="st_title">Наклейки на оружии</div>
+			<div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+				<input id="stSearch" data-i18n-ph="search_items" placeholder="Поиск" spellcheck="false"></div>
+			<div class="spacer"></div>
+			<span class="muted small" id="stHint"></span>
+			<button class="btn ghost icon-btn" id="stRefresh" data-i18n-title="refresh" title="Обновить"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+		</div>
+		<div class="st-body">
+			<main id="stWeapons" class="st-weapons"></main>
+			<aside class="st-side"><div class="section-title" style="padding:12px 14px 6px" data-i18n="st_mine">Мои наклейки</div><div id="stStickers" class="st-stickers"></div></aside>
+		</div>
+	</section>
+
+	<!-- ---------------------------------------------------------------- Armory -->
+	<section id="armoryView" class="pane-view hidden">
+		<div class="pane-head">
+			<div class="section-title">Armory</div>
+			<div class="stars-pill"><svg viewBox="0 0 24 24"><path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8L12 3.5Z" fill="currentColor"/></svg><b id="armBalance">0</b></div>
+			<div class="spacer"></div>
+			<button class="btn ghost" id="armPass" data-i18n="arm_buy_pass">Купить пропуск Armory</button>
+			<button class="btn ghost icon-btn" id="armRefresh" data-i18n-title="refresh" title="Обновить"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+		</div>
+		<div id="armNote" class="arm-note hidden"></div>
+		<div id="armGrid" class="arm-grid"></div>
+	</section>
+
+	<!-- ---------------------------------------------------------------- трейды -->
+	<section id="tradesView" class="pane-view hidden">
+		<div class="pane-head">
+			<div class="section-title" data-i18n="trades_title">Торговые предложения</div>
+			<div class="spacer"></div>
+			<label class="check pill"><input type="checkbox" id="giftToggle" class="switch"> <span data-i18n="gift_auto">Автоприём подарков</span></label>
+			<button class="btn ghost" id="giftsNow" data-i18n="gift_now">Принять подарки сейчас</button>
+		</div>
+		<div class="trades-body">
+			<aside class="trades-list">
+				<div class="trades-tools">
+					<div class="segmented small" id="tradeDir">
+						<button data-dir="in" class="active" data-i18n="trades_in">Входящие</button>
+						<button data-dir="out" data-i18n="trades_out">Исходящие</button>
+					</div>
+					<label class="check small"><input type="checkbox" id="tradeActive" checked> <span data-i18n="trades_active">Только активные</span></label>
+					<button class="btn ghost icon-btn" id="tradesRefresh" data-i18n-title="refresh" title="Обновить"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+				</div>
+				<div id="tradeItems" class="trade-items"></div>
+			</aside>
+			<main id="tradeDetail" class="trade-detail"></main>
+		</div>
+	</section>
+
+	<!-- ---------------------------------------------------------------- маркет -->
+	<section id="marketView" class="pane-view hidden">
+		<div class="pane-head">
+			<div class="section-title" data-i18n="market_title">Торговая площадка Steam</div>
+			<div class="spacer"></div>
+			<button class="btn ghost icon-btn" id="marketRefresh" data-i18n-title="refresh" title="Обновить"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+		</div>
+		<div class="market-stats">
+			<div class="stat" data-mtab="listings"><b id="mSumListings">—</b><span data-i18n="m_listings">Лоты на продаже</span></div>
+			<div class="stat" data-mtab="orders"><b id="mSumOrders">—</b><span data-i18n="m_orders">Ордера на покупку</span></div>
+			<div class="stat" data-mtab="confirm"><b id="mSumConfirm">—</b><span data-i18n="m_confirm">Подтверждения</span></div>
+		</div>
+		<div class="market-bar">
+			<div class="segmented small" id="marketTabs">
+				<button data-mtab="listings" class="active"><span data-i18n="m_listings">Лоты на продаже</span> <span class="badge" id="mCntListings">0</span></button>
+				<button data-mtab="orders"><span data-i18n="m_orders">Ордера на покупку</span> <span class="badge" id="mCntOrders">0</span></button>
+				<button data-mtab="confirm"><span data-i18n="m_confirm">Подтверждения</span> <span class="badge" id="mCntConfirm">0</span></button>
+				<button data-mtab="history" data-i18n="m_history">История</button>
+				<button data-mtab="sell" data-i18n="m_sell">Продать</button>
+			</div>
+			<div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+				<input id="marketSearch" data-i18n-ph="search_items" placeholder="Поиск" spellcheck="false"></div>
+			<div class="spacer"></div>
+			<button class="btn ghost hidden" id="mBulk"></button>
+		</div>
+		<div id="marketTable" class="market-table"></div>
+	</section>
+</section>
+
+<!-- ============================================================ диалоги -->
+<div id="qtyModal" class="modal hidden" role="dialog" aria-modal="true">
+	<div class="card modal-card">
+		<h3 id="qtyTitle" data-i18n="qty_title">Количество</h3>
+		<p class="muted small" id="qtyUnit"></p>
+		<label><span data-i18n="qty_how_many">Сколько штук</span><input id="qtyInput" type="number" min="1" max="100" value="1"></label>
+		<div class="modal-actions"><button class="btn ghost" id="qtyCancel" data-i18n="cancel">Отмена</button><button class="btn primary" id="qtyOk" data-i18n="next">Далее</button></div>
+	</div>
+</div>
+
+<div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true">
+	<div class="card modal-card settings-card">
+		<h3 data-i18n="settings">Настройки</h3>
+		<p class="muted small" data-i18n="settings_scope">Настройки действуют для всего приложения и всех аккаунтов.</p>
+		<label class="switch-row">
+			<span><span class="strong" data-i18n="fast_buy">Быстрая покупка</span><span class="muted small block-text" data-i18n="fast_buy_desc"></span></span>
+			<input type="checkbox" id="fastBuyToggle" class="switch">
+		</label>
+		<div class="settings-support">
+			<div><div class="strong" data-i18n="support_title">Поддержать разработчика</div><div class="muted small" data-i18n="support_settings_hint">Приложение бесплатное и с открытым кодом — его развитие держится на поддержке.</div></div>
+			<button class="btn support-btn" id="settingsSupport"><svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2Z" fill="currentColor"/></svg><span data-i18n="support_short">Поддержать</span></button>
+		</div>
+		<label class="check small" style="margin-top:10px"><input type="checkbox" id="nudgeOff"> <span data-i18n="support_nudge_off">Не показывать напоминания о поддержке</span></label>
+		<div class="modal-actions"><button class="btn primary" id="settingsClose" data-i18n="close">Закрыть</button></div>
+	</div>
+</div>
+
+<div id="supportModal" class="modal hidden" role="dialog" aria-modal="true">
+	<div class="card modal-card support-card">
+		<div class="support-head"><span class="support-ico"><svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2Z" fill="currentColor"/></svg></span><div><h3 data-i18n="support_title">Поддержать разработчика</h3>
+			<p class="muted small" data-i18n="support_text">Caskit бесплатный, без подписок и с открытым кодом. Если он экономит вам время — поддержите разработку любым удобным способом. Спасибо!</p></div></div>
+		<div id="supportList" class="support-list"></div>
+		<div class="modal-actions"><button class="btn primary" id="supportClose" data-i18n="close">Закрыть</button></div>
+	</div>
+</div>
+
+<div id="rulesModal" class="modal hidden" role="dialog" aria-modal="true">
+	<div class="card modal-card rules-card">
+		<h3 data-i18n="rules_title">Правила перекладки</h3>
+		<p class="muted small" data-i18n="rules_hint">Подходящие предметы из инвентаря раскладываются по ящикам, чьё имя начинается с указанного префикса («Cases» → «Cases 01», затем «Cases 02»). Правила проверяются сверху вниз.</p>
+		<div class="rule-head"><span data-i18n="rule_kind">Тип</span><span data-i18n="rule_text">Название содержит</span><span data-i18n="rule_casket">Ящики с именем на</span><span></span></div>
+		<div id="rulesList" class="rules-list"></div>
+		<button class="btn ghost small" id="ruleAdd" data-i18n="rule_add">+ Добавить правило</button>
+		<label class="check" style="margin-top:14px"><input type="checkbox" id="rulesAuto"> <span data-i18n="rules_auto">Применять автоматически после входа в аккаунт</span></label>
+		<div id="rulesPlan" class="rules-plan hidden"></div>
+		<div class="modal-actions">
+			<button class="btn ghost" id="rulesClose" data-i18n="close">Закрыть</button>
+			<button class="btn ghost" id="rulesPreview" data-i18n="rules_preview">Сохранить и показать план</button>
+			<button class="btn primary hidden" id="rulesApply"></button>
+		</div>
+	</div>
+</div>
+
+<div id="checkoutModal" class="modal hidden" role="dialog" aria-modal="true">
+	<div class="card checkout-card">
+		<div class="checkout-main">
+			<div class="co-account">
+				<div class="avatar" id="coAvatar"></div>
+				<div><div class="strong" id="coLogin"></div><div class="muted small" data-i18n="cs2_account">Аккаунт Steam</div></div>
+				<div class="co-pay"><div class="muted small" data-i18n="payment_method">Способ оплаты</div><div><span class="good-text" data-i18n="steam_wallet">Кошелёк Steam</span> <span class="muted" id="coBalance"></span></div></div>
+			</div>
+			<div id="coBody" class="co-body"></div>
+			<div id="coHint" class="co-hint hidden">
+				<svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+				<span><span data-i18n="fast_hint">Покупайте мгновенно без этого окна — включите «Быструю покупку» в</span> <a href="#" id="coHintLink" data-i18n="settings_link">настройках</a>.</span>
+			</div>
+		</div>
+		<aside class="checkout-side">
+			<div class="co-side-head"><span class="strong" data-i18n="cart">Корзина</span><span class="muted small" id="coStep"></span></div>
+			<div id="coLines" class="co-lines"></div>
+		</aside>
+	</div>
+</div>
+
+<div id="guardModal" class="modal hidden" role="dialog" aria-modal="true">
+	<div class="card modal-card">
+		<h3 data-i18n="guard_title">Код Steam Guard</h3>
+		<p class="muted" id="guardText"></p>
+		<input id="guardCode" class="code-input" maxlength="8" autocomplete="one-time-code" spellcheck="false">
+		<p id="guardWrong" class="error-text hidden" data-i18n="guard_wrong">Код не подошёл — попробуйте ещё раз</p>
+		<div class="modal-actions"><button class="btn ghost" id="guardCancel" data-i18n="cancel">Отмена</button><button class="btn primary" id="guardSend" data-i18n="confirm">Подтвердить</button></div>
+	</div>
+</div>
+
+<div id="toasts" class="toasts"></div>
+<script src="config.js"></script>
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

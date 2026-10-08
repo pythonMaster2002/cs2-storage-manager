@@ -1,0 +1,115 @@
+{
+  "name": "caskit",
+  "version": "0.4.0",
+  "description": "Caskit — free and open-source CS2 Storage Unit manager: fast transfers, store, trade-ups, trades, market, Armory.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win nsis portable --x64",
+    "build:linux": "electron-builder --linux AppImage deb --x64",
+    "build:mac": "electron-builder --mac dmg zip --x64 --arm64",
+    "release": "electron-builder --publish always"
+  },
+  "author": {
+    "name": "mikidjus"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^44.6.0",
+    "electron-builder": "^26.15.3"
+  },
+  "productName": "Caskit",
+  "build": {
+    "appId": "app.caskit",
+    "productName": "Caskit",
+    "copyright": "MIT License",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "package.json",
+      "build/icon.png",
+      "!tools",
+      "!dist",
+      "!**/*.md",
+      "!**/node_modules/**/{*.proto,*.d.ts,*.map,*.ts,*.markdown,CHANGELOG*,README*,HISTORY*,AUTHORS*,.eslintrc*,.travis.yml,.github,tsconfig.json}",
+      "!**/node_modules/**/{test,tests,__tests__,docs,doc,example,examples,benchmark,bench,coverage}/**",
+      "!**/node_modules/protobufjs/{cli,dist/light,dist/minimal}/**",
+      "!**/node_modules/globaloffensive/protobufs/*.proto"
+    ],
+    "electronLanguages": [
+      "en-US",
+      "ru",
+      "uk",
+      "de",
+      "es",
+      "pt-BR",
+      "fr",
+      "pl",
+      "tr",
+      "zh-CN"
+    ],
+    "compression": "maximum",
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.png",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "Caskit-Setup-${version}.${ext}",
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "Caskit-${version}-portable.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.utilities",
+      "icon": "build/icon.png",
+      "artifactName": "Caskit-${version}-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "icon": "build/icon.png",
+      "artifactName": "Caskit-${version}-${arch}.${ext}",
+      "maintainer": "mikidjus",
+      "executableName": "caskit"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "express": "^4.22.3",
+    "globaloffensive": "^3.3.0",
+    "https-proxy-agent": "^9.1.0",
+    "lzma": "^2.3.2",
+    "qrcode": "^1.5.4",
+    "socks-proxy-agent": "^10.1.0",
+    "steam-session": "^1.9.4",
+    "steam-totp": "^2.1.2",
+    "steam-user": "^5.3.0"
+  },
+  "repository": "https://github.com/pythonMaster2002/cs2-storage-manager",
+  "homepage": "https://github.com/pythonMaster2002/cs2-storage-manager"
+}
