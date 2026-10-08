@@ -6,11 +6,11 @@
   "crypto": [
     {
       "label": "USDT · TRC20 (Tron)",
-      "address": ""
+      "address": "TNyiw9RzN9qdcYANL5uojrtoijEUjvx75u"
     },
     {
       "label": "USDT · BEP20 (BNB Smart Chain)",
-      "address": ""
+      "address": "0x0645092acbb782b109134d853dadfb6543745d94"
     }
   ],
   "github": "https://github.com/pythonMaster2002/cs2-storage-manager"
