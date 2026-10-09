@@ -1994,6 +1994,18 @@ async function stickerApply(weaponId, slot) {
 	await stickerAct('/api/stickers/apply', { weaponId, stickerItemId: sel.ids[0], slot }, t('st_applied'));
 }
 
+// Соскоблить — тоже с подтверждением: шаг необратим (+10–15% износа), а на 100% следующий шаг снимает наклейку.
+async function stickerScrape(weaponId, slot) {
+	const w = ui.stk && ui.stk.weapons.find(x => x.id === weaponId);
+	const s = w && w.stickers.find(x => x.slot === slot);
+	const name = s ? s.name.replace(/^Sticker \| /, '') : '';
+	const wear = s ? Math.round(s.wear * 100) : 0;
+	const r = await miniConfirm({ warn: true, title: t('st_scrape_title'),
+		text: s && s.wear >= 0.999 ? t('st_scrape_last', { name }) : t('st_scrape_confirm', { name, wear }),
+		extra: s && s.image ? `<div class="mini-preview"><img src="${esc(s.image)}" alt=""></div>` : '', ok: t('st_scrape') });
+	if (r.ok) await stickerAct('/api/stickers/scrape', { weaponId, slot }, t('st_scraped'));
+}
+
 async function stickerRemove(weaponId, slot) {
 	const r = await miniConfirm({ warn: true, title: t('st_remove_title'), text: t('st_remove_confirm'), ok: t('delete') });
 	if (r.ok) await stickerAct('/api/stickers/scrape', { weaponId, slot, remove: true }, t('st_removed'));
@@ -2008,7 +2020,7 @@ $('stWeapons').addEventListener('click', e => {
 	if (d.inspCopy) copyText(d.inspCopy);
 	if (d.openInv) openExt(d.openInv);
 	if (d.put) stickerApply(d.put, Number(d.slot));
-	if (d.scrape) stickerAct('/api/stickers/scrape', { weaponId: d.scrape, slot: Number(d.slot) }, t('st_scraped'));
+	if (d.scrape) stickerScrape(d.scrape, Number(d.slot));
 	if (d.remove) stickerRemove(d.remove, Number(d.slot));
 });
 
