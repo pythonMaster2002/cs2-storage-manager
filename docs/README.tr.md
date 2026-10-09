@@ -27,7 +27,9 @@ Abonelik ve üçüncü taraf sunucu yok: her şey bilgisayarınızda çalışır
 <a href="README.zh.md">简体中文</a>
 </p>
 
-<p align="center"><img src="screenshots/caskets.png" alt="Caskit" width="900"></p>
+<p align="center"><img src="screenshots/demo.gif" alt="Caskit" width="900"></p>
+
+> **Casemove’dan mı geliyorsunuz?** Son sürümü Aralık 2024’te çıktı. Caskit depolarla aynı işi yapar; ayrıca kontrat şansları ve float, çıkartmalar, CS2 mağazası, takaslar ve Pazar, dahili Steam Guard ve kendi proxy’si olan birden çok hesap sunar — ve aktif olarak geliştiriliyor.
 
 ## Özellikler
 

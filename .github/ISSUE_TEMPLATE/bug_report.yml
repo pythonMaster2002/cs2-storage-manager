@@ -1,0 +1,43 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! You can write in any language.
+        **Never post passwords, maFiles, Steam Guard codes or tokens.**
+  - type: input
+    id: version
+    attributes:
+      label: Caskit version
+      description: Shown at the bottom of the left menu (e.g. 1.0.0)
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: System
+      options: [Windows (installer), Windows (portable), macOS, Linux AppImage, Linux deb]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Caskets
+        2. Select …
+        3. …
+  - type: textarea
+    id: screens
+    attributes:
+      label: Screenshots or error text
+      description: Hide account names if you like.

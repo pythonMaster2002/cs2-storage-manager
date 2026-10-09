@@ -27,7 +27,9 @@ No subscriptions, no third-party servers: everything runs on your computer and t
 <a href="docs/README.zh.md">简体中文</a>
 </p>
 
-<p align="center"><img src="docs/screenshots/caskets.png" alt="Storage units" width="900"></p>
+<p align="center"><img src="docs/screenshots/demo.gif" alt="Caskit: storing 60 cases into a storage unit, then a trade-up with outcome chances" width="900"></p>
+
+> **Coming from Casemove?** Its last release was in December 2024. Caskit covers the same storage-unit workflow and adds trade-up odds and floats, stickers, the CS2 store, trades and the Community Market, a built-in Steam Guard and several accounts with their own proxies — and it is actively maintained.
 
 ## Features
 

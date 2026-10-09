@@ -27,7 +27,9 @@ Bez subskrypcji i zewnętrznych serwerów: wszystko działa na twoim komputerze 
 <a href="README.zh.md">简体中文</a>
 </p>
 
-<p align="center"><img src="screenshots/caskets.png" alt="Caskit" width="900"></p>
+<p align="center"><img src="screenshots/demo.gif" alt="Caskit" width="900"></p>
+
+> **Używałeś Casemove?** Jego ostatnie wydanie ukazało się w grudniu 2024. Caskit robi to samo z pojemnikami, a do tego szanse i floaty kontraktów, naklejki, sklep CS2, wymiany i Rynek, wbudowany Steam Guard oraz kilka kont z własnymi proxy — i jest aktywnie rozwijany.
 
 ## Funkcje
 

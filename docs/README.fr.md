@@ -27,7 +27,9 @@ Sans abonnement ni serveur tiers : tout tourne sur votre ordinateur et parle dir
 <a href="README.zh.md">简体中文</a>
 </p>
 
-<p align="center"><img src="screenshots/caskets.png" alt="Caskit" width="900"></p>
+<p align="center"><img src="screenshots/demo.gif" alt="Caskit" width="900"></p>
+
+> **Vous venez de Casemove ?** Sa dernière version date de décembre 2024. Caskit couvre le même usage des unités de stockage et ajoute les chances et floats des contrats, les autocollants, la boutique CS2, les échanges et le Marché, un Steam Guard intégré et plusieurs comptes avec leur propre proxy — et il est activement maintenu.
 
 ## Fonctionnalités
 

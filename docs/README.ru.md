@@ -27,7 +27,9 @@
 <a href="README.zh.md">简体中文</a>
 </p>
 
-<p align="center"><img src="screenshots/caskets_ru.png" alt="Caskit" width="900"></p>
+<p align="center"><img src="screenshots/demo_ru.gif" alt="Caskit" width="900"></p>
+
+> **Пользовались Casemove?** Его последний релиз вышел в декабре 2024 года. Caskit делает всё то же с ящиками и добавляет шансы и float контрактов, наклейки, магазин CS2, трейды и Торговую площадку, встроенный Steam Guard и несколько аккаунтов со своими прокси — и проект активно развивается.
 
 ## Возможности
 

@@ -654,8 +654,21 @@ EXTRA = {
  csp_1="Windows 版本由 GitHub Actions 从本仓库构建，并通过 SignPath 签名（开源项目免费，证书属于 SignPath Foundation）。详情见 [Code signing policy](../README.md#code-signing-policy)（英文）。",
 ),
 }
+# Блок для пользователей Casemove (под демо-роликом)
+CM = {
+ 'ru': "**Пользовались Casemove?** Его последний релиз вышел в декабре 2024 года. Caskit делает всё то же с ящиками и добавляет шансы и float контрактов, наклейки, магазин CS2, трейды и Торговую площадку, встроенный Steam Guard и несколько аккаунтов со своими прокси — и проект активно развивается.",
+ 'uk': "**Користувалися Casemove?** Його останній реліз вийшов у грудні 2024 року. Caskit робить усе те саме зі сховищами й додає шанси та float контрактів, наліпки, магазин CS2, обміни й Торговий майданчик, вбудований Steam Guard і кілька акаунтів із власними проксі — і проєкт активно розвивається.",
+ 'de': "**Du kommst von Casemove?** Die letzte Version erschien im Dezember 2024. Caskit deckt denselben Ablauf mit Lagereinheiten ab und bietet zusätzlich Trade-up-Chancen und Floats, Sticker, den CS2-Shop, Tausch und Community-Markt, einen eingebauten Steam Guard und mehrere Konten mit eigenen Proxys — und wird aktiv weiterentwickelt.",
+ 'es': "**¿Vienes de Casemove?** Su última versión salió en diciembre de 2024. Caskit cubre el mismo flujo con contenedores y añade probabilidades y floats de contratos, pegatinas, la tienda de CS2, intercambios y el Mercado, un Steam Guard integrado y varias cuentas con su propio proxy, y se mantiene activamente.",
+ 'pt': "**Vem do Casemove?** A última versão dele saiu em dezembro de 2024. O Caskit faz o mesmo com os contêineres e ainda traz chances e floats de contratos, adesivos, a loja do CS2, trocas e o Mercado, um Steam Guard embutido e várias contas com proxy próprio — e é mantido ativamente.",
+ 'fr': "**Vous venez de Casemove ?** Sa dernière version date de décembre 2024. Caskit couvre le même usage des unités de stockage et ajoute les chances et floats des contrats, les autocollants, la boutique CS2, les échanges et le Marché, un Steam Guard intégré et plusieurs comptes avec leur propre proxy — et il est activement maintenu.",
+ 'pl': "**Używałeś Casemove?** Jego ostatnie wydanie ukazało się w grudniu 2024. Caskit robi to samo z pojemnikami, a do tego szanse i floaty kontraktów, naklejki, sklep CS2, wymiany i Rynek, wbudowany Steam Guard oraz kilka kont z własnymi proxy — i jest aktywnie rozwijany.",
+ 'tr': "**Casemove’dan mı geliyorsunuz?** Son sürümü Aralık 2024’te çıktı. Caskit depolarla aynı işi yapar; ayrıca kontrat şansları ve float, çıkartmalar, CS2 mağazası, takaslar ve Pazar, dahili Steam Guard ve kendi proxy’si olan birden çok hesap sunar — ve aktif olarak geliştiriliyor.",
+ 'zh': "**之前用过 Casemove？** 它的最后一个版本发布于 2024 年 12 月。Caskit 提供同样的储物柜操作，并增加了汰换合同概率与磨损、印花、CS2 商店、交易与社区市场、内置 Steam 令牌，以及可使用独立代理的多账户支持——并且仍在积极维护。",
+}
 for _c, _e in EXTRA.items():
     T[_c].update(_e)
+    T[_c]['cm'] = CM[_c]
 
 TEMPLATE = '''<p align="center"><img src="../build/icon.png" width="120" alt="Caskit"></p>
 
@@ -677,7 +690,9 @@ TEMPLATE = '''<p align="center"><img src="../build/icon.png" width="120" alt="Ca
 {langbar}
 </p>
 
-<p align="center"><img src="screenshots/caskets{shots}.png" alt="Caskit" width="900"></p>
+<p align="center"><img src="screenshots/demo{shots}.gif" alt="Caskit" width="900"></p>
+
+> {cm}
 
 ## {features}
 

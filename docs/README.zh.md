@@ -27,7 +27,9 @@
 <b>简体中文</b>
 </p>
 
-<p align="center"><img src="screenshots/caskets.png" alt="Caskit" width="900"></p>
+<p align="center"><img src="screenshots/demo.gif" alt="Caskit" width="900"></p>
+
+> **之前用过 Casemove？** 它的最后一个版本发布于 2024 年 12 月。Caskit 提供同样的储物柜操作，并增加了汰换合同概率与磨损、印花、CS2 商店、交易与社区市场、内置 Steam 令牌，以及可使用独立代理的多账户支持——并且仍在积极维护。
 
 ## 功能
 
