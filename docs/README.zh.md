@@ -89,12 +89,21 @@
 - **macOS**（「应用已损坏」/「无法验证」）：右键点击应用 → **打开**，或在终端执行 `xattr -cr "/Applications/Caskit.app"`。
 - **Linux AppImage**：`chmod +x Caskit-*.AppImage`，然后运行。
 
+### 卸载
+
+- **Windows（安装版）**：设置 → 应用 → **Caskit** → 卸载。**便携版**：直接删除 `.exe` 即可。
+- **macOS**：将 **Caskit** 从“应用程序”拖到废纸篓。
+- **Linux**：删除 AppImage，或对 `.deb` 执行 `sudo apt remove caskit`。
+
+已保存的登录信息和设置保留在数据文件夹中（见常见问题）——如需全部清除，请一并删除。
+
 ## 安全与隐私
 
 - Caskit 只与 Steam（以及 CS2 游戏协调器）通信。密码从不保存；refresh token 和 maFile 密钥由系统**加密**后保存在你的磁盘上（Windows DPAPI / macOS 钥匙串 / Linux libsecret）。
 - 如果账户设置了代理，该账户的*全部*流量都经过代理——网页请求、二维码、头像。代理不可用时，登录会中止，而不会直接连接。
 - 本地 API 只监听 `127.0.0.1`，并要求只有应用窗口知道的随机令牌。
 - 物品名称和图标每天从游戏文件的公开镜像更新一次（[GameTracking-CS2](https://github.com/SteamDatabase/GameTracking-CS2)、[counter-strike-image-tracker](https://github.com/ByMykel/counter-strike-image-tracker)）——不会发送任何账户数据。
+- 无分析、无遥测。完整的网络连接列表见 **[隐私政策](../PRIVACY.md)**（英文）。
 
 ## 常见问题
 
@@ -126,6 +135,10 @@ npm run build:mac      # dmg + zip（仅限 macOS）
 ```
 
 **发布**：在 `package.json` 中提升 `version`，然后执行 `git tag vX.Y.Z && git push --tags`。GitHub Actions 会构建三个系统的版本并发布到 Releases；已安装的副本会自动更新。
+
+## 代码签名政策
+
+Windows 版本由 GitHub Actions 从本仓库构建，并通过 SignPath 签名（开源项目免费，证书属于 SignPath Foundation）。详情见 [Code signing policy](../README.md#code-signing-policy)（英文）。
 
 ## 许可证
 

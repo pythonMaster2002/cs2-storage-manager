@@ -89,12 +89,21 @@ Get the latest version on the **[Releases](https://github.com/pythonMaster2002/c
 - **macOS** (“app is damaged” / “can't be checked”): right-click the app → **Open**, or run `xattr -cr "/Applications/Caskit.app"` in Terminal.
 - **Linux AppImage**: `chmod +x Caskit-*.AppImage`, then run it.
 
+### Uninstall
+
+- **Windows (installer)**: Settings → Apps → **Caskit** → Uninstall. **Portable**: just delete the `.exe`.
+- **macOS**: drag **Caskit** from Applications to the Trash.
+- **Linux**: delete the AppImage, or `sudo apt remove caskit` for the `.deb`.
+
+Your saved sign-ins and settings stay in the data folder (see [FAQ](#faq)); delete it as well to remove everything.
+
 ## Security and privacy
 
 - Caskit talks only to Steam (and the CS2 Game Coordinator). Your password is never stored; the refresh token and maFile secrets are kept on your disk **encrypted** by the OS (Windows DPAPI / macOS Keychain / libsecret on Linux).
 - If an account has a proxy, *all* its traffic goes through it, including web requests, the QR code and the avatar. If the proxy is down, sign-in stops instead of going direct.
 - The local API listens on `127.0.0.1` only and requires a random token known only to the app window.
 - Item names and icons are refreshed once a day from public mirrors of the game files ([GameTracking-CS2](https://github.com/SteamDatabase/GameTracking-CS2), [counter-strike-image-tracker](https://github.com/ByMykel/counter-strike-image-tracker)) — no account data is sent.
+- No analytics, no telemetry. Full list of network connections: **[Privacy policy](PRIVACY.md)**.
 
 ## FAQ
 
@@ -126,6 +135,17 @@ npm run build:mac      # dmg + zip (macOS only)
 ```
 
 **Release**: bump `version` in `package.json`, then `git tag vX.Y.Z && git push --tags`. GitHub Actions builds all three systems and publishes them to Releases; installed copies update themselves.
+
+## Code signing policy
+
+Windows releases are built from this repository by [GitHub Actions](.github/workflows/release.yml) and are intended to be signed through SignPath. Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+*Status: the application is in progress — until it is approved, releases are unsigned.*
+
+- Committers and reviewers: [mikidjus](https://github.com/pythonMaster2002)
+- Approvers: [mikidjus](https://github.com/pythonMaster2002)
+
+Every signed release is built by CI from a tagged commit and manually approved before signing.
+Privacy: see the [privacy policy](PRIVACY.md) — Caskit has no telemetry and sends data only to the services listed there.
 
 ## License
 

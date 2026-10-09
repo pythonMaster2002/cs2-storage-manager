@@ -89,12 +89,21 @@ Najnowsza wersja jest na stronie **[Releases](https://github.com/pythonMaster200
 - **macOS** („aplikacja jest uszkodzona” / „nie można zweryfikować”): prawy klik na aplikację → **Otwórz** albo w Terminalu `xattr -cr "/Applications/Caskit.app"`.
 - **Linux AppImage**: `chmod +x Caskit-*.AppImage`, potem uruchom.
 
+### Odinstalowanie
+
+- **Windows (instalator)**: Ustawienia → Aplikacje → **Caskit** → Odinstaluj. **Portable**: po prostu usuń `.exe`.
+- **macOS**: przeciągnij **Caskit** z Aplikacji do Kosza.
+- **Linux**: usuń AppImage albo `sudo apt remove caskit` dla `.deb`.
+
+Zapisane logowania i ustawienia zostają w folderze danych (zobacz FAQ) — usuń go też, aby skasować wszystko.
+
 ## Bezpieczeństwo i prywatność
 
 - Caskit łączy się tylko ze Steam (i Game Coordinatorem CS2). Hasło nigdy nie jest zapisywane; refresh token i sekrety maFile są przechowywane na twoim dysku **zaszyfrowane** przez system (Windows DPAPI / pęk kluczy macOS / libsecret w Linuksie).
 - Jeśli konto ma proxy, przez nie idzie *cały* ruch konta — zapytania WWW, kod QR, awatar. Gdy proxy nie działa, logowanie zostaje przerwane zamiast iść bezpośrednio.
 - Lokalne API nasłuchuje tylko na `127.0.0.1` i wymaga losowego tokenu znanego tylko oknu aplikacji.
 - Nazwy i ikony są raz dziennie aktualizowane z publicznych kopii plików gry ([GameTracking-CS2](https://github.com/SteamDatabase/GameTracking-CS2), [counter-strike-image-tracker](https://github.com/ByMykel/counter-strike-image-tracker)) — bez danych kont.
+- Bez analityki i telemetrii. Pełna lista połączeń sieciowych w **[polityce prywatności](../PRIVACY.md)** (po angielsku).
 
 ## FAQ
 
@@ -126,6 +135,10 @@ npm run build:mac      # dmg + zip (tylko na macOS)
 ```
 
 **Wydanie**: podnieś `version` w `package.json`, potem `git tag vX.Y.Z && git push --tags`. GitHub Actions zbuduje wszystkie trzy systemy i opublikuje je w Releases; zainstalowane kopie zaktualizują się same.
+
+## Zasady podpisywania kodu
+
+Wersje dla Windows są budowane z tego repozytorium w GitHub Actions i podpisywane przez SignPath (bezpłatnie dla open source, certyfikat SignPath Foundation). Szczegóły: [Code signing policy](../README.md#code-signing-policy) (po angielsku).
 
 ## Licencja
 

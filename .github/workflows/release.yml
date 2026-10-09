@@ -3,7 +3,12 @@
 #  2) build   — Windows (установщик + portable), macOS (dmg + zip, Intel и Apple Silicon), Linux (AppImage + deb)
 #               собираются параллельно и загружаются в этот черновик;
 #  3) publish — черновик публикуется; установленные копии подхватывают обновление (latest.yml / latest-mac.yml).
-# Подпись Windows включится сама, если в секретах репозитория есть WIN_CSC_LINK (pfx в base64) и WIN_CSC_KEY_PASSWORD.
+# Подпись Windows:
+#  • SignPath (бесплатно для open source, см. «Code signing policy» в README): включается, когда в репозитории
+#    заданы переменная SIGNPATH_ORGANIZATION_ID и секрет SIGNPATH_API_TOKEN (слаги — переменными SIGNPATH_*).
+#    Сборка без подписи → SignPath (каждый релиз подтверждается вручную) → подписанные exe, новые latest.yml и
+#    блок-карта загружаются в черновик (tools/release-signed.js);
+#  • или свой сертификат: секреты WIN_CSC_LINK (pfx в base64) и WIN_CSC_KEY_PASSWORD.
 name: Release
 
 on:
@@ -54,6 +59,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Build and upload to the draft release
+        if: matrix.os != 'windows-latest' || vars.SIGNPATH_ORGANIZATION_ID == ''
         shell: bash   # в PowerShell аргумент -c.win.… разбирается как путь к файлу конфигурации
         run: npx electron-builder ${{ matrix.args }} --publish always
         env:
@@ -61,6 +67,41 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'   # без платной подписи Apple; см. README про первый запуск на macOS
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      # ---- Windows + SignPath
+      - name: Build (unsigned, for SignPath)
+        if: matrix.os == 'windows-latest' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        shell: bash
+        run: npx electron-builder ${{ matrix.args }} --publish never
+      - name: Upload unsigned build for SignPath
+        if: matrix.os == 'windows-latest' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        id: unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-unsigned
+          if-no-files-found: error
+          path: |
+            dist/Caskit-Setup-*.exe
+            dist/Caskit-*-portable.exe
+      - name: Sign with SignPath
+        if: matrix.os == 'windows-latest' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'caskit' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 21600   # релиз подтверждается вручную в SignPath
+          output-artifact-directory: signed
+      - name: Upload signed build to the draft release
+        if: matrix.os == 'windows-latest' && vars.SIGNPATH_ORGANIZATION_ID != ''
+        shell: bash
+        run: node tools/release-signed.js signed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish:
     needs: build

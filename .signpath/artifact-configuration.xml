@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Конфигурация артефакта для SignPath (вставить в проект SignPath → Artifact configurations).
+     Артефакт — zip из GitHub Actions (шаг «Upload unsigned build for SignPath» в release.yml):
+     установщик NSIS и portable-exe лежат в корне архива. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="Caskit-Setup-*.exe" product-name="Caskit">
+      <authenticode-sign />
+    </pe-file>
+    <pe-file path="Caskit-*-portable.exe" product-name="Caskit">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

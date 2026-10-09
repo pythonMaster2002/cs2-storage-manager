@@ -89,12 +89,21 @@ Die neueste Version gibt es unter **[Releases](https://github.com/pythonMaster20
 - **macOS** („App ist beschädigt“ / „kann nicht überprüft werden“): Rechtsklick auf die App → **Öffnen** oder im Terminal `xattr -cr "/Applications/Caskit.app"`.
 - **Linux AppImage**: `chmod +x Caskit-*.AppImage`, dann starten.
 
+### Deinstallieren
+
+- **Windows (Installer)**: Einstellungen → Apps → **Caskit** → Deinstallieren. **Portable**: einfach die `.exe` löschen.
+- **macOS**: **Caskit** aus „Programme“ in den Papierkorb ziehen.
+- **Linux**: AppImage löschen oder `sudo apt remove caskit` für das `.deb`.
+
+Gespeicherte Anmeldungen und Einstellungen bleiben im Datenordner (siehe FAQ) — lösche ihn ebenfalls, um alles zu entfernen.
+
 ## Sicherheit und Privatsphäre
 
 - Caskit spricht nur mit Steam (und dem CS2 Game Coordinator). Dein Passwort wird nie gespeichert; Refresh-Token und maFile-Geheimnisse liegen **verschlüsselt** durch das System auf deiner Festplatte (Windows DPAPI / macOS-Schlüsselbund / libsecret unter Linux).
 - Hat ein Konto einen Proxy, läuft *der gesamte* Verkehr darüber — Webanfragen, QR-Code, Avatar. Fällt der Proxy aus, bricht die Anmeldung ab, statt direkt zu verbinden.
 - Die lokale API lauscht nur auf `127.0.0.1` und verlangt ein zufälliges Token, das nur das App-Fenster kennt.
 - Namen und Icons werden einmal täglich aus öffentlichen Kopien der Spieldateien aktualisiert ([GameTracking-CS2](https://github.com/SteamDatabase/GameTracking-CS2), [counter-strike-image-tracker](https://github.com/ByMykel/counter-strike-image-tracker)) — ohne Kontodaten.
+- Keine Analyse, keine Telemetrie. Alle Netzwerkverbindungen stehen in der **[Datenschutzerklärung](../PRIVACY.md)** (Englisch).
 
 ## FAQ
 
@@ -126,6 +135,10 @@ npm run build:mac      # dmg + zip (nur unter macOS)
 ```
 
 **Release**: `version` in `package.json` erhöhen, dann `git tag vX.Y.Z && git push --tags`. GitHub Actions baut alle drei Systeme und veröffentlicht sie unter Releases; installierte Kopien aktualisieren sich selbst.
+
+## Code-Signing-Richtlinie
+
+Windows-Builds werden per GitHub Actions aus diesem Repository erstellt und über SignPath signiert (kostenlos für Open Source, Zertifikat der SignPath Foundation). Details: [Code signing policy](../README.md#code-signing-policy) (Englisch).
 
 ## Lizenz
 

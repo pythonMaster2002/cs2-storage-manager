@@ -89,12 +89,21 @@ En son sürüm **[Releases](https://github.com/pythonMaster2002/cs2-storage-mana
 - **macOS** («uygulama hasarlı» / «doğrulanamıyor»): uygulamaya sağ tıklayın → **Aç** ya da Terminal’de `xattr -cr "/Applications/Caskit.app"`.
 - **Linux AppImage**: `chmod +x Caskit-*.AppImage`, ardından çalıştırın.
 
+### Kaldırma
+
+- **Windows (kurulum)**: Ayarlar → Uygulamalar → **Caskit** → Kaldır. **Portable**: `.exe` dosyasını silmeniz yeterli.
+- **macOS**: **Caskit**’i Uygulamalar’dan Çöp Sepeti’ne sürükleyin.
+- **Linux**: AppImage’i silin ya da `.deb` için `sudo apt remove caskit`.
+
+Kayıtlı girişler ve ayarlar veri klasöründe kalır (SSS’ye bakın) — her şeyi silmek için onu da silin.
+
 ## Güvenlik ve gizlilik
 
 - Caskit yalnızca Steam (ve CS2 Game Coordinator) ile konuşur. Şifreniz asla kaydedilmez; refresh token ve maFile sırları diskinizde sistem tarafından **şifrelenmiş** olarak tutulur (Windows DPAPI / macOS Anahtar Zinciri / Linux’ta libsecret).
 - Bir hesabın proxy’si varsa, hesabın *tüm* trafiği ondan geçer — web istekleri, QR kod, avatar. Proxy çalışmıyorsa giriş doğrudan bağlanmak yerine durur.
 - Yerel API yalnızca `127.0.0.1` üzerinde dinler ve sadece uygulama penceresinin bildiği rastgele bir token ister.
 - Eşya adları ve simgeleri günde bir kez oyun dosyalarının herkese açık kopyalarından güncellenir ([GameTracking-CS2](https://github.com/SteamDatabase/GameTracking-CS2), [counter-strike-image-tracker](https://github.com/ByMykel/counter-strike-image-tracker)) — hesap verisi gönderilmez.
+- Analitik ve telemetri yok. Tüm ağ bağlantılarının listesi **[gizlilik politikasında](../PRIVACY.md)** (İngilizce).
 
 ## SSS
 
@@ -126,6 +135,10 @@ npm run build:mac      # dmg + zip (yalnızca macOS’ta)
 ```
 
 **Sürüm yayınlama**: `package.json` içindeki `version` değerini artırın, ardından `git tag vX.Y.Z && git push --tags`. GitHub Actions üç sistemi derleyip Releases’a yükler; kurulu kopyalar kendini günceller.
+
+## Kod imzalama politikası
+
+Windows sürümleri bu depodan GitHub Actions ile derlenir ve SignPath üzerinden imzalanır (açık kaynak için ücretsiz, sertifika SignPath Foundation’a ait). Ayrıntılar: [Code signing policy](../README.md#code-signing-policy) (İngilizce).
 
 ## Lisans
 

@@ -89,12 +89,21 @@ La dernière version est sur la page **[Releases](https://github.com/pythonMaste
 - **macOS** (« l’app est endommagée » / « impossible de vérifier ») : clic droit sur l’app → **Ouvrir**, ou dans le Terminal `xattr -cr "/Applications/Caskit.app"`.
 - **Linux AppImage** : `chmod +x Caskit-*.AppImage`, puis lancez-le.
 
+### Désinstaller
+
+- **Windows (installateur)** : Paramètres → Applications → **Caskit** → Désinstaller. **Portable** : supprimez simplement le `.exe`.
+- **macOS** : glissez **Caskit** des Applications vers la Corbeille.
+- **Linux** : supprimez l’AppImage, ou `sudo apt remove caskit` pour le `.deb`.
+
+Les connexions enregistrées et les réglages restent dans le dossier de données (voir FAQ) ; supprimez-le aussi pour tout effacer.
+
 ## Sécurité et confidentialité
 
 - Caskit ne parle qu’à Steam (et au Game Coordinator de CS2). Votre mot de passe n’est jamais enregistré ; le refresh token et les secrets maFile sont stockés sur votre disque, **chiffrés** par le système (Windows DPAPI / Trousseau macOS / libsecret sous Linux).
 - Si un compte a un proxy, *tout* son trafic passe par lui — requêtes web, QR code, avatar. Si le proxy est en panne, la connexion s’arrête au lieu de passer en direct.
 - L’API locale n’écoute que sur `127.0.0.1` et exige un jeton aléatoire connu de la seule fenêtre de l’app.
 - Les noms et icônes sont mis à jour une fois par jour depuis des copies publiques des fichiers du jeu ([GameTracking-CS2](https://github.com/SteamDatabase/GameTracking-CS2), [counter-strike-image-tracker](https://github.com/ByMykel/counter-strike-image-tracker)) — aucune donnée de compte n’est envoyée.
+- Pas d’analytique ni de télémétrie. Liste complète des connexions réseau dans la **[politique de confidentialité](../PRIVACY.md)** (en anglais).
 
 ## FAQ
 
@@ -126,6 +135,10 @@ npm run build:mac      # dmg + zip (macOS uniquement)
 ```
 
 **Publication** : augmentez `version` dans `package.json`, puis `git tag vX.Y.Z && git push --tags`. GitHub Actions compile les trois systèmes et les publie dans Releases ; les copies installées se mettent à jour seules.
+
+## Politique de signature du code
+
+Les versions Windows sont compilées depuis ce dépôt par GitHub Actions et signées via SignPath (gratuit pour l’open source, certificat de SignPath Foundation). Détails : [Code signing policy](../README.md#code-signing-policy) (en anglais).
 
 ## Licence
 

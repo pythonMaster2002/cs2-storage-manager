@@ -561,6 +561,102 @@ T = {
 ),
 }
 
+# Удаление, приватность и политика подписи (добавлены к основным текстам)
+EXTRA = {
+'ru': dict(
+ un="Удаление",
+ un_win="**Windows (установщик)**: Параметры → Приложения → **Caskit** → Удалить. **Portable**: просто удалите `.exe`.",
+ un_mac="**macOS**: перетащите **Caskit** из «Программ» в Корзину.",
+ un_lin="**Linux**: удалите AppImage или `sudo apt remove caskit` для `.deb`.",
+ un_data="Сохранённые входы и настройки остаются в папке данных (см. вопросы ниже) — удалите и её, чтобы стереть всё.",
+ priv="Без аналитики и телеметрии. Полный список сетевых подключений — в **[политике конфиденциальности](../PRIVACY.md)** (англ.).",
+ csp="Политика подписи кода",
+ csp_1="Сборки для Windows собираются из этого репозитория в GitHub Actions; подпись — через SignPath (бесплатно для открытых проектов, сертификат SignPath Foundation). Подробности — в разделе [Code signing policy](../README.md#code-signing-policy) (англ.).",
+),
+'uk': dict(
+ un="Видалення",
+ un_win="**Windows (інсталятор)**: Параметри → Програми → **Caskit** → Видалити. **Portable**: просто видаліть `.exe`.",
+ un_mac="**macOS**: перетягніть **Caskit** із «Програм» у Кошик.",
+ un_lin="**Linux**: видаліть AppImage або `sudo apt remove caskit` для `.deb`.",
+ un_data="Збережені входи й налаштування залишаються в папці даних (див. питання нижче) — видаліть і її, щоб стерти все.",
+ priv="Без аналітики й телеметрії. Повний список мережевих підключень — у **[політиці конфіденційності](../PRIVACY.md)** (англ.).",
+ csp="Політика підпису коду",
+ csp_1="Збірки для Windows збираються з цього репозиторію в GitHub Actions; підпис — через SignPath (безкоштовно для відкритих проєктів, сертифікат SignPath Foundation). Докладніше — у розділі [Code signing policy](../README.md#code-signing-policy) (англ.).",
+),
+'de': dict(
+ un="Deinstallieren",
+ un_win="**Windows (Installer)**: Einstellungen → Apps → **Caskit** → Deinstallieren. **Portable**: einfach die `.exe` löschen.",
+ un_mac="**macOS**: **Caskit** aus „Programme“ in den Papierkorb ziehen.",
+ un_lin="**Linux**: AppImage löschen oder `sudo apt remove caskit` für das `.deb`.",
+ un_data="Gespeicherte Anmeldungen und Einstellungen bleiben im Datenordner (siehe FAQ) — lösche ihn ebenfalls, um alles zu entfernen.",
+ priv="Keine Analyse, keine Telemetrie. Alle Netzwerkverbindungen stehen in der **[Datenschutzerklärung](../PRIVACY.md)** (Englisch).",
+ csp="Code-Signing-Richtlinie",
+ csp_1="Windows-Builds werden per GitHub Actions aus diesem Repository erstellt und über SignPath signiert (kostenlos für Open Source, Zertifikat der SignPath Foundation). Details: [Code signing policy](../README.md#code-signing-policy) (Englisch).",
+),
+'es': dict(
+ un="Desinstalar",
+ un_win="**Windows (instalador)**: Configuración → Aplicaciones → **Caskit** → Desinstalar. **Portable**: borra el `.exe`.",
+ un_mac="**macOS**: arrastra **Caskit** de Aplicaciones a la Papelera.",
+ un_lin="**Linux**: borra el AppImage o `sudo apt remove caskit` para el `.deb`.",
+ un_data="Los inicios de sesión guardados y los ajustes quedan en la carpeta de datos (ver preguntas frecuentes); bórrala también para eliminarlo todo.",
+ priv="Sin analíticas ni telemetría. Lista completa de conexiones de red en la **[política de privacidad](../PRIVACY.md)** (en inglés).",
+ csp="Política de firma de código",
+ csp_1="Las versiones de Windows se compilan desde este repositorio con GitHub Actions y se firman mediante SignPath (gratis para código abierto, certificado de SignPath Foundation). Detalles: [Code signing policy](../README.md#code-signing-policy) (en inglés).",
+),
+'pt': dict(
+ un="Desinstalar",
+ un_win="**Windows (instalador)**: Configurações → Aplicativos → **Caskit** → Desinstalar. **Portable**: apague o `.exe`.",
+ un_mac="**macOS**: arraste o **Caskit** de Aplicativos para o Lixo.",
+ un_lin="**Linux**: apague o AppImage ou `sudo apt remove caskit` para o `.deb`.",
+ un_data="Os logins salvos e as configurações ficam na pasta de dados (veja as perguntas frequentes); apague-a também para remover tudo.",
+ priv="Sem análises nem telemetria. Lista completa de conexões de rede na **[política de privacidade](../PRIVACY.md)** (em inglês).",
+ csp="Política de assinatura de código",
+ csp_1="As versões para Windows são compiladas a partir deste repositório no GitHub Actions e assinadas via SignPath (gratuito para código aberto, certificado da SignPath Foundation). Detalhes: [Code signing policy](../README.md#code-signing-policy) (em inglês).",
+),
+'fr': dict(
+ un="Désinstaller",
+ un_win="**Windows (installateur)** : Paramètres → Applications → **Caskit** → Désinstaller. **Portable** : supprimez simplement le `.exe`.",
+ un_mac="**macOS** : glissez **Caskit** des Applications vers la Corbeille.",
+ un_lin="**Linux** : supprimez l’AppImage, ou `sudo apt remove caskit` pour le `.deb`.",
+ un_data="Les connexions enregistrées et les réglages restent dans le dossier de données (voir FAQ) ; supprimez-le aussi pour tout effacer.",
+ priv="Pas d’analytique ni de télémétrie. Liste complète des connexions réseau dans la **[politique de confidentialité](../PRIVACY.md)** (en anglais).",
+ csp="Politique de signature du code",
+ csp_1="Les versions Windows sont compilées depuis ce dépôt par GitHub Actions et signées via SignPath (gratuit pour l’open source, certificat de SignPath Foundation). Détails : [Code signing policy](../README.md#code-signing-policy) (en anglais).",
+),
+'pl': dict(
+ un="Odinstalowanie",
+ un_win="**Windows (instalator)**: Ustawienia → Aplikacje → **Caskit** → Odinstaluj. **Portable**: po prostu usuń `.exe`.",
+ un_mac="**macOS**: przeciągnij **Caskit** z Aplikacji do Kosza.",
+ un_lin="**Linux**: usuń AppImage albo `sudo apt remove caskit` dla `.deb`.",
+ un_data="Zapisane logowania i ustawienia zostają w folderze danych (zobacz FAQ) — usuń go też, aby skasować wszystko.",
+ priv="Bez analityki i telemetrii. Pełna lista połączeń sieciowych w **[polityce prywatności](../PRIVACY.md)** (po angielsku).",
+ csp="Zasady podpisywania kodu",
+ csp_1="Wersje dla Windows są budowane z tego repozytorium w GitHub Actions i podpisywane przez SignPath (bezpłatnie dla open source, certyfikat SignPath Foundation). Szczegóły: [Code signing policy](../README.md#code-signing-policy) (po angielsku).",
+),
+'tr': dict(
+ un="Kaldırma",
+ un_win="**Windows (kurulum)**: Ayarlar → Uygulamalar → **Caskit** → Kaldır. **Portable**: `.exe` dosyasını silmeniz yeterli.",
+ un_mac="**macOS**: **Caskit**’i Uygulamalar’dan Çöp Sepeti’ne sürükleyin.",
+ un_lin="**Linux**: AppImage’i silin ya da `.deb` için `sudo apt remove caskit`.",
+ un_data="Kayıtlı girişler ve ayarlar veri klasöründe kalır (SSS’ye bakın) — her şeyi silmek için onu da silin.",
+ priv="Analitik ve telemetri yok. Tüm ağ bağlantılarının listesi **[gizlilik politikasında](../PRIVACY.md)** (İngilizce).",
+ csp="Kod imzalama politikası",
+ csp_1="Windows sürümleri bu depodan GitHub Actions ile derlenir ve SignPath üzerinden imzalanır (açık kaynak için ücretsiz, sertifika SignPath Foundation’a ait). Ayrıntılar: [Code signing policy](../README.md#code-signing-policy) (İngilizce).",
+),
+'zh': dict(
+ un="卸载",
+ un_win="**Windows（安装版）**：设置 → 应用 → **Caskit** → 卸载。**便携版**：直接删除 `.exe` 即可。",
+ un_mac="**macOS**：将 **Caskit** 从“应用程序”拖到废纸篓。",
+ un_lin="**Linux**：删除 AppImage，或对 `.deb` 执行 `sudo apt remove caskit`。",
+ un_data="已保存的登录信息和设置保留在数据文件夹中（见常见问题）——如需全部清除，请一并删除。",
+ priv="无分析、无遥测。完整的网络连接列表见 **[隐私政策](../PRIVACY.md)**（英文）。",
+ csp="代码签名政策",
+ csp_1="Windows 版本由 GitHub Actions 从本仓库构建，并通过 SignPath 签名（开源项目免费，证书属于 SignPath Foundation）。详情见 [Code signing policy](../README.md#code-signing-policy)（英文）。",
+),
+}
+for _c, _e in EXTRA.items():
+    T[_c].update(_e)
+
 TEMPLATE = '''<p align="center"><img src="../build/icon.png" width="120" alt="Caskit"></p>
 
 <h1 align="center">Caskit</h1>
@@ -643,12 +739,21 @@ TEMPLATE = '''<p align="center"><img src="../build/icon.png" width="120" alt="Ca
 - {first_mac}
 - {first_lin}
 
+### {un}
+
+- {un_win}
+- {un_mac}
+- {un_lin}
+
+{un_data}
+
 ## {sec}
 
 - {sec_1}
 - {sec_2}
 - {sec_3}
 - {sec_4}
+- {priv}
 
 ## {faq}
 
@@ -680,6 +785,10 @@ npm run build:mac      # {c_mac}
 ```
 
 {rel}
+
+## {csp}
+
+{csp_1}
 
 ## {lic}
 
