@@ -1,6 +1,6 @@
 {
   "name": "caskit",
-  "version": "0.7.2",
+  "version": "1.0.0",
   "description": "Caskit — free and open-source CS2 Storage Unit manager: fast transfers, store, trade-ups, trades, market, Armory.",
   "main": "main.js",
   "scripts": {
@@ -22,7 +22,7 @@
   "build": {
     "appId": "app.caskit",
     "productName": "Caskit",
-    "copyright": "MIT License",
+    "copyright": "© 2026 mikidjus — MIT License",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -66,7 +66,12 @@
       "oneClick": true,
       "perMachine": false,
       "artifactName": "Caskit-Setup-${version}.${ext}",
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "Caskit",
+      "uninstallDisplayName": "Caskit",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true
     },
     "portable": {
       "artifactName": "Caskit-${version}-portable.${ext}"
@@ -94,7 +99,7 @@
     "publish": [
       {
         "provider": "github",
-        "releaseType": "release"
+        "releaseType": "draft"
       }
     ]
   },

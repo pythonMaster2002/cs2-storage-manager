@@ -1,88 +1,134 @@
-<p align="center"><img src="build/icon.png" width="112" alt=""></p>
+<p align="center"><img src="build/icon.png" width="120" alt="Caskit"></p>
 
 <h1 align="center">Caskit</h1>
 
-<p align="center"><b>CS2 Storage Manager</b> — бесплатный менеджер ящиков (Storage Unit) и инвентаря CS2 с открытым кодом.<br>
-Без подписок, без сторонних серверов — работает напрямую со Steam с вашего компьютера.</p>
+<p align="center"><b>Free, open-source CS2 storage unit &amp; inventory manager.</b><br>
+Fast transfers, trade-up odds, stickers, store, market and Steam Guard — for several accounts at once.<br>
+No subscriptions, no third-party servers: everything runs on your computer and talks to Steam directly.</p>
 
 <p align="center">
-<img src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-blue" alt="platforms">
-<img src="https://img.shields.io/badge/license-MIT-green" alt="license">
+<a href="https://github.com/pythonMaster2002/cs2-storage-manager/releases/latest"><img src="https://img.shields.io/github/v/release/pythonMaster2002/cs2-storage-manager?label=download&color=2d73ff" alt="Latest release"></a>
+<a href="https://github.com/pythonMaster2002/cs2-storage-manager/releases"><img src="https://img.shields.io/github/downloads/pythonMaster2002/cs2-storage-manager/total?color=06bfff" alt="Downloads"></a>
+<img src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-informational" alt="Platforms">
+<img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
 <a href="https://ko-fi.com/mikidjus"><img src="https://img.shields.io/badge/Ko--fi-support-ff5e5b?logo=ko-fi&logoColor=white" alt="Ko-fi"></a>
 </p>
 
-## Возможности
+<p align="center">
+<b>English</b> ·
+<a href="docs/README.ru.md">Русский</a> ·
+<a href="docs/README.uk.md">Українська</a> ·
+<a href="docs/README.de.md">Deutsch</a> ·
+<a href="docs/README.es.md">Español</a> ·
+<a href="docs/README.pt.md">Português</a> ·
+<a href="docs/README.fr.md">Français</a> ·
+<a href="docs/README.pl.md">Polski</a> ·
+<a href="docs/README.tr.md">Türkçe</a> ·
+<a href="docs/README.zh.md">简体中文</a>
+</p>
 
-- **Быстрая перекладка** в ящики и обратно — скорость подбирается сама под ограничения Steam (обычно 8–13 предметов/с) — и **правила автоперекладки**: «все кейсы → ящики Cases 01, Cases 02…», по кнопке или сразу после входа.
-- **Магазин CS2** с корзиной, избранным и мгновенной покупкой (по желанию — без окна подтверждения). Названия и картинки товаров обновляются сами.
-- **Контракты обмена**, в том числе из предметов, лежащих в ящиках: возможные исходы с шансами, float входов и прогноз float результата, «осмотреть в игре» и ссылка на Торговую площадку.
-- **Armory**: награды за звёзды пропуска.
-- **Наклейки**: наклеить, соскоблить, удалить.
-- **Трейды**: входящие/исходящие, принять/отклонить, автоприём подарков.
-- **Маркет Steam**: лоты, ордера, подтверждения (с maFile), история с поиском, продажа с расчётом комиссии.
-- **Несколько аккаунтов** одновременно, у каждого свой прокси (SOCKS5/HTTP).
-- Вход по **QR-коду** (код появляется сразу), логину и паролю (+ Steam Guard) или через **maFile**.
-- Экспорт инвентаря и ящиков в JSON/CSV. 10 языков интерфейса.
+<p align="center"><img src="docs/screenshots/caskets.png" alt="Storage units" width="900"></p>
 
-## Скачать
+## Features
 
-Последняя версия — на странице [Releases](../../releases/latest).
+**Storage units**
+- Move items into and out of storage units in bulk. The speed tunes itself to Steam's limits (usually 8–13 items/s), and stuck items are retried automatically.
+- **Transfer rules**: “all cases → Cases 01, Cases 02…”, “stickers → Stickers”. Run them with one click or right after sign-in.
+- Rename units, hide full ones, and export everything to JSON/CSV.
 
-| Система | Файл | |
+**Trade-up contracts**
+- Build contracts from your inventory *and* from storage units (items are taken out automatically).
+- See every possible outcome with its **chance**, the float of each input and the **predicted float** of the result on a wear bar.
+- Items the game won't accept (top grade of their collection) are marked in advance. Souvenirs are supported.
+- After crafting: **Inspect in game** and **View on Community Market**.
+
+**Stickers**
+- Apply, scrape and remove stickers — including CS2 free-placement stickers.
+- Weapon float with a wear bar, sticker wear, inspect links and a link to the item in your Steam inventory.
+
+**CS2 Store and Armory**
+- Cart, favourites, wallet balance and the balance left after purchase. Every payment is confirmed by you.
+- Armory: redeem stars for rewards.
+- Item names and icons update by themselves from the game files.
+
+**Trades, Market and Steam Guard**
+- Incoming and outgoing trade offers, accept/decline, auto-accept gifts.
+- Market listings, buy orders, searchable history, selling with the fee calculated for you.
+- A small **SDA** built in: Steam Guard codes for every account with a maFile, trade and listing confirmations, proxy health monitoring.
+
+**Accounts and privacy**
+- Several accounts at once, each with its own SOCKS5/HTTP proxy.
+- Sign in with a **QR code** (it shows up instantly), a login and password, or a **maFile**.
+- 10 interface languages, automatic updates (installer version).
+
+## Screenshots
+
+| | |
+|---|---|
+| <img src="docs/screenshots/tradeup.png" alt="Trade-up odds"> | <img src="docs/screenshots/craft.png" alt="Trade-up result"> |
+| **Trade-up**: outcomes, chances, floats | **Result**: inspect in game or open on the market |
+| <img src="docs/screenshots/stickers.png" alt="Stickers"> | <img src="docs/screenshots/store.png" alt="Store"> |
+| **Stickers**: apply, scrape, remove | **CS2 Store**: cart and wallet |
+| <img src="docs/screenshots/overview.png" alt="Overview"> | <img src="docs/screenshots/guard.png" alt="Steam Guard"> |
+| **Overview** of one or all accounts | **Steam Guard**: codes and confirmations |
+
+## Download
+
+Get the latest version on the **[Releases](https://github.com/pythonMaster2002/cs2-storage-manager/releases/latest)** page.
+
+| System | File | |
 |---|---|---|
-| Windows | `Caskit-Setup-x.y.z.exe` | установщик, рекомендуется — быстрый запуск и автообновления |
-| Windows | `Caskit-x.y.z-portable.exe` | без установки (запускается медленнее, обновлять вручную) |
-| macOS | `…-arm64.dmg` (Apple Silicon) / `…-x64.dmg` (Intel) | |
-| Linux | `…-x86_64.AppImage` или `…-amd64.deb` | |
+| Windows | `Caskit-Setup-x.y.z.exe` | **recommended** — installs in a few seconds, no admin rights, updates itself |
+| Windows | `Caskit-x.y.z-portable.exe` | no installation (starts slower, update manually) |
+| macOS | `Caskit-x.y.z-arm64.dmg` (Apple Silicon) / `Caskit-x.y.z-x64.dmg` (Intel) | |
+| Linux | `Caskit-x.y.z-x86_64.AppImage` or `Caskit-x.y.z-amd64.deb` | |
 
-**Первый запуск.** Сборки пока без платной цифровой подписи, поэтому система предупредит:
+**First launch.** The builds are not code-signed yet, so the system may warn you once:
 
-- **Windows** (SmartScreen «Windows защитила ваш компьютер») — «Подробнее» → «Выполнить в любом случае».
-- **macOS** («приложение повреждено» / «не удаётся проверить разработчика») — правый клик по приложению → «Открыть», либо в Терминале: `xattr -cr "/Applications/Caskit.app"`.
-- **Linux AppImage** — `chmod +x Caskit-*.AppImage` и запустить.
+- **Windows** (“Windows protected your PC”): click **More info → Run anyway**.
+- **macOS** (“app is damaged” / “can't be checked”): right-click the app → **Open**, or run `xattr -cr "/Applications/Caskit.app"` in Terminal.
+- **Linux AppImage**: `chmod +x Caskit-*.AppImage`, then run it.
 
-## Безопасность
+## Security and privacy
 
-- Приложение общается только со Steam (и Game Coordinator CS2). Пароль не сохраняется; refresh token и секреты maFile хранятся у вас на диске **зашифрованными** средствами системы (Windows DPAPI / связка ключей macOS / libsecret на Linux).
-- Через прокси аккаунта идёт весь трафик этого аккаунта, включая веб-запросы и загрузку аватара; если прокси не работает, вход прерывается.
-- Локальный API слушает только `127.0.0.1` и требует случайный токен, известный лишь окну приложения.
-- Справочники названий и картинок раз в сутки скачиваются из публичных копий файлов игры
-  ([GameTracking-CS2](https://github.com/SteamDatabase/GameTracking-CS2), [counter-strike-image-tracker](https://github.com/ByMykel/counter-strike-image-tracker)) — без данных аккаунта.
+- Caskit talks only to Steam (and the CS2 Game Coordinator). Your password is never stored; the refresh token and maFile secrets are kept on your disk **encrypted** by the OS (Windows DPAPI / macOS Keychain / libsecret on Linux).
+- If an account has a proxy, *all* its traffic goes through it, including web requests, the QR code and the avatar. If the proxy is down, sign-in stops instead of going direct.
+- The local API listens on `127.0.0.1` only and requires a random token known only to the app window.
+- Item names and icons are refreshed once a day from public mirrors of the game files ([GameTracking-CS2](https://github.com/SteamDatabase/GameTracking-CS2), [counter-strike-image-tracker](https://github.com/ByMykel/counter-strike-image-tracker)) — no account data is sent.
 
-> Для работы с ящиками приложение входит как клиент Steam и «запускает» CS2 (сама игра не открывается, VAC не задействован). Если в это время вы играете в CS2 на этом аккаунте — одно выкинет другое.
+## FAQ
 
-## Поддержать разработчика
+**Can I get a VAC ban for this?** Caskit doesn't touch the game, its files or its memory, and doesn't launch CS2. It signs in as a Steam client and talks to the CS2 Game Coordinator the same way the game's own inventory does, so VAC isn't involved. It is still an unofficial tool, so use it at your own risk.
 
-Приложение бесплатное и всегда будет таким. Если оно экономит вам время:
+**Can I play while Caskit is open?** If you start CS2 on the same account, Steam keeps only one of the two sessions. Sign out of that account in Caskit first.
 
-- ☕ [Ko-fi](https://ko-fi.com/mikidjus) — картой или PayPal;
-- 🎁 [подарить скин](https://steamcommunity.com/tradeoffer/new/?partner=146040317&token=Q_pa1oMK) — любой лишний кейс или скин;
-- 💎 крипта (Binance Pay / USDT) — адреса в приложении: кнопка ♥ «Поддержать»;
-- ⭐ звезда этому репозиторию.
+**Where is my data?** Only on your computer: `%APPDATA%\Caskit` (Windows), `~/Library/Application Support/Caskit` (macOS), `~/.config/Caskit` (Linux).
 
-## Сборка из исходников
+## Support the project
 
-Нужен Node.js 22+.
+Caskit is free and always will be. If it saves you time:
+
+- ☕ [Ko-fi](https://ko-fi.com/mikidjus) — card or PayPal
+- 🎁 [Send a skin](https://steamcommunity.com/tradeoffer/new/?partner=146040317&token=Q_pa1oMK) — any spare case or skin
+- 💎 Crypto (Binance Pay / USDT) — addresses in the app: ♥ button
+- ⭐ Star this repository
+
+## Build from source
+
+Requires Node.js 22+.
 
 ```bash
 npm ci
-npm start              # запуск
-npm run build:win      # установщик + portable → dist/
+npm start              # run
+npm run build:win      # installer + portable → dist/
 npm run build:linux    # AppImage + deb
-npm run build:mac      # dmg + zip (только на macOS)
+npm run build:mac      # dmg + zip (macOS only)
 ```
 
-**Релиз**: поднимите `version` в `package.json`, затем
-`git tag v0.5.0 && git push --tags` — GitHub Actions соберёт все три системы и выложит их в Releases;
-установленные копии приложения обновятся сами.
+**Release**: bump `version` in `package.json`, then `git tag vX.Y.Z && git push --tags`. GitHub Actions builds all three systems and publishes them to Releases; installed copies update themselves.
 
-Способы поддержки — в `src/data/support.json` (пустые поля скрыты). Если задать `dataUrl` в
-`src/data/catalog-source.json` (например, `https://raw.githubusercontent.com/<user>/<repo>/main/src/data`),
-приложение будет раз в сутки подтягивать оттуда свежие `support.json` и карты без выпуска новой версии.
-
-## Лицензия
+## License
 
 [MIT](LICENSE)
 
-Caskit — независимый проект с открытым кодом. Не связан с Valve Corporation и не одобрен ею.
-Counter-Strike, CS2 и Steam — товарные знаки Valve Corporation.
+Caskit is an independent open-source project, not affiliated with or endorsed by Valve Corporation. Counter-Strike, CS2 and Steam are trademarks of Valve Corporation.

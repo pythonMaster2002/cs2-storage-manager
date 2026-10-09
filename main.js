@@ -21,6 +21,8 @@ try { process.env.CASKET_DATA_CACHE = path.join(app.getPath('userData'), 'catalo
 const { start } = require('./src/server');
 
 if (!app.requestSingleInstanceLock()) app.quit();
+// Windows: своё имя приложения в панели задач и уведомлениях (а не «Electron»)
+if (process.platform === 'win32') app.setAppUserModelId('app.caskit');
 
 let win;
 
