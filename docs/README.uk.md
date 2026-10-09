@@ -29,7 +29,7 @@
 
 <p align="center"><img src="screenshots/demo.gif" alt="Caskit" width="900"></p>
 
-> **Користувалися Casemove?** Автор припинив його підтримку заради Skinledger — «Casemove 2.0», платного сервісу: безкоштовна версія лише перекладає предмети, а швидке перекладання, покупки в магазині, контракти, Armory, більше акаунтів, обміни й маркет — за підпискою $9.99–24.99 на місяць ([FAQ Skinledger](https://skinledger.com/#frequently-asked-questions), [тарифи](https://skinledger.com/en/pricing-compare), жовтень 2026). Caskit робить усе це **безкоштовно**, без реєстрації на чужих сайтах — і з відкритим кодом.
+> **Користувалися Casemove?** Сам Casemove тепер показує повідомлення: *«Casemove has been replaced by Skinledger… Prices, images and items will break in Casemove eventually»* — «Casemove замінено на Skinledger… ціни, зображення й предмети в Casemove згодом зламаються» ([джерело](https://github.com/nombersDev/casemove/blob/main/src/renderer/components/content/shared/infoModal.tsx)). Skinledger — платний сервіс: безкоштовна версія лише перекладає предмети, а швидке перекладання, покупки в магазині, контракти, Armory, більше акаунтів, обміни й маркет — за підпискою $9.99–24.99 на місяць ([FAQ](https://skinledger.com/#frequently-asked-questions), [тарифи](https://skinledger.com/en/pricing-compare), жовтень 2026). Caskit робить усе це **безкоштовно**, без реєстрації на чужих сайтах — і з відкритим кодом.
 
 ## Можливості
 

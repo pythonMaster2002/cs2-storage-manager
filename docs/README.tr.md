@@ -29,7 +29,7 @@ Abonelik ve üçüncü taraf sunucu yok: her şey bilgisayarınızda çalışır
 
 <p align="center"><img src="screenshots/demo.gif" alt="Caskit" width="900"></p>
 
-> **Casemove’dan mı geliyorsunuz?** Yazarı onu Skinledger lehine bıraktı — «Casemove 2.0» adlı ücretli bir hizmet: ücretsiz sürüm yalnızca eşya taşır; hızlı aktarım, mağaza alımları, kontratlar, Armory, daha fazla hesap, takaslar ve pazar ayda 9,99–24,99 $ abonelik ister ([Skinledger SSS](https://skinledger.com/#frequently-asked-questions), [fiyatlar](https://skinledger.com/en/pricing-compare), Ekim 2026). Caskit bunların hepsini **ücretsiz**, başka sitelerde hesap açmadan ve açık kaynak olarak yapar.
+> **Casemove’dan mı geliyorsunuz?** Casemove artık şu uyarıyı gösteriyor: *«Casemove has been replaced by Skinledger… Prices, images and items will break in Casemove eventually»* ([kaynak](https://github.com/nombersDev/casemove/blob/main/src/renderer/components/content/shared/infoModal.tsx)). Skinledger ücretlidir: ücretsiz sürüm yalnızca eşya taşır; hızlı aktarım, mağaza alımları, kontratlar, Armory, daha fazla hesap, takaslar ve pazar ayda 9,99–24,99 $ ister ([SSS](https://skinledger.com/#frequently-asked-questions), [fiyatlar](https://skinledger.com/en/pricing-compare), Ekim 2026). Caskit bunların hepsini **ücretsiz**, başka sitelerde hesap açmadan ve açık kaynak olarak yapar.
 
 ## Özellikler
 

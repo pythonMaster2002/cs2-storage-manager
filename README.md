@@ -29,7 +29,7 @@ No subscriptions, no third-party servers: everything runs on your computer and t
 
 <p align="center"><img src="docs/screenshots/demo.gif" alt="Caskit: storing 60 cases into a storage unit, then a trade-up with outcome chances" width="900"></p>
 
-> **Coming from Casemove?** Its author has discontinued it in favour of Skinledger — “Casemove 2.0”, a paid service: the free version only moves items, while fast transfers, store purchases, trade-ups, Armory, more accounts, trades and market tools need a subscription of $9.99–24.99 per month ([Skinledger FAQ](https://skinledger.com/#frequently-asked-questions), [pricing](https://skinledger.com/en/pricing-compare), October 2026). Caskit does all of that **for free**, with no account on anyone's website — and the code is open.
+> **Coming from Casemove?** Casemove now shows a deprecation notice: *“Casemove has been replaced by Skinledger… Prices, images and items will break in Casemove eventually”* ([source](https://github.com/nombersDev/casemove/blob/main/src/renderer/components/content/shared/infoModal.tsx)). Skinledger is a paid service: its free version only moves items, while fast transfers, store purchases, trade-ups, Armory, more accounts, trades and market tools need a subscription of $9.99–24.99 per month ([FAQ](https://skinledger.com/#frequently-asked-questions), [pricing](https://skinledger.com/en/pricing-compare), October 2026). Caskit does all of that **for free**, with no account on anyone's website — and the code is open.
 
 ## Features
 

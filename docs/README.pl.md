@@ -29,7 +29,7 @@ Bez subskrypcji i zewnętrznych serwerów: wszystko działa na twoim komputerze 
 
 <p align="center"><img src="screenshots/demo.gif" alt="Caskit" width="900"></p>
 
-> **Używałeś Casemove?** Autor porzucił go na rzecz Skinledger — „Casemove 2.0”, płatnej usługi: darmowa wersja tylko przenosi przedmioty, a szybkie przenoszenie, zakupy w sklepie, kontrakty, Armory, więcej kont, wymiany i rynek kosztują 9,99–24,99 $ miesięcznie ([FAQ Skinledger](https://skinledger.com/#frequently-asked-questions), [cennik](https://skinledger.com/en/pricing-compare), październik 2026). Caskit robi to wszystko **za darmo**, bez konta na cudzych stronach — i z otwartym kodem.
+> **Używałeś Casemove?** Casemove wyświetla teraz komunikat: *«Casemove has been replaced by Skinledger… Prices, images and items will break in Casemove eventually»* ([źródło](https://github.com/nombersDev/casemove/blob/main/src/renderer/components/content/shared/infoModal.tsx)). Skinledger jest płatny: darmowa wersja tylko przenosi przedmioty, a szybkie przenoszenie, zakupy w sklepie, kontrakty, Armory, więcej kont, wymiany i rynek kosztują 9,99–24,99 $ miesięcznie ([FAQ](https://skinledger.com/#frequently-asked-questions), [cennik](https://skinledger.com/en/pricing-compare), październik 2026). Caskit robi to wszystko **za darmo**, bez konta na cudzych stronach — i z otwartym kodem.
 
 ## Funkcje
 

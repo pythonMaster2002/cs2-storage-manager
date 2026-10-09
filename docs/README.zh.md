@@ -29,7 +29,7 @@
 
 <p align="center"><img src="screenshots/demo.gif" alt="Caskit" width="900"></p>
 
-> **之前用过 Casemove？** 其作者已停止维护它，转而推出付费服务 Skinledger（“Casemove 2.0”）：免费版只能移动物品，快速转移、商店购买、汰换合同、军械库、更多账户、交易和市场功能需每月 9.99–24.99 美元订阅（[Skinledger 常见问题](https://skinledger.com/#frequently-asked-questions)、[价格](https://skinledger.com/en/pricing-compare)，2026 年 10 月）。Caskit **免费**提供以上全部功能，无需在任何网站注册账户——并且开源。
+> **之前用过 Casemove？** Casemove 现在会显示停用通知：*«Casemove has been replaced by Skinledger… Prices, images and items will break in Casemove eventually»*（[源码](https://github.com/nombersDev/casemove/blob/main/src/renderer/components/content/shared/infoModal.tsx)）。Skinledger 是付费服务：免费版只能移动物品，快速转移、商店购买、汰换合同、军械库、更多账户、交易和市场功能需每月 9.99–24.99 美元订阅（[常见问题](https://skinledger.com/#frequently-asked-questions)、[价格](https://skinledger.com/en/pricing-compare)，2026 年 10 月）。Caskit **免费**提供以上全部功能，无需在任何网站注册账户——并且开源。
 
 ## 功能
 

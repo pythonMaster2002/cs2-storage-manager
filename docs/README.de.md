@@ -29,7 +29,7 @@ Keine Abos, keine Fremdserver: Alles läuft auf deinem Rechner und spricht direk
 
 <p align="center"><img src="screenshots/demo.gif" alt="Caskit" width="900"></p>
 
-> **Du kommst von Casemove?** Der Autor hat es zugunsten von Skinledger eingestellt — „Casemove 2.0“, ein kostenpflichtiger Dienst: Die Gratisversion verschiebt nur Gegenstände; schnelles Umlagern, Shop-Käufe, Trade-ups, Armory, mehr Konten, Tausch und Markt kosten 9,99–24,99 $ im Monat ([Skinledger-FAQ](https://skinledger.com/#frequently-asked-questions), [Preise](https://skinledger.com/en/pricing-compare), Oktober 2026). Caskit kann das alles **kostenlos**, ohne Konto auf fremden Websites — und als Open Source.
+> **Du kommst von Casemove?** Casemove zeigt jetzt selbst einen Hinweis: *«Casemove has been replaced by Skinledger… Prices, images and items will break in Casemove eventually»* ([Quelle](https://github.com/nombersDev/casemove/blob/main/src/renderer/components/content/shared/infoModal.tsx)). Skinledger ist kostenpflichtig: Die Gratisversion verschiebt nur Gegenstände; schnelles Umlagern, Shop-Käufe, Trade-ups, Armory, mehr Konten, Tausch und Markt kosten 9,99–24,99 $ im Monat ([FAQ](https://skinledger.com/#frequently-asked-questions), [Preise](https://skinledger.com/en/pricing-compare), Oktober 2026). Caskit kann das alles **kostenlos**, ohne Konto auf fremden Websites — und als Open Source.
 
 ## Funktionen
 
