@@ -77,6 +77,7 @@ function itemImage(item) {
 		const img = m && m[item.def_index] && m[item.def_index].image;
 		if (img) return /economy\/image\//.test(img) ? `${img}/96fx96f` : img;
 	}
+	if (key.startsWith('sticker:')) return catalog.stickerIcon(key.slice(8));  // с запасным путём для старых наклеек
 	const tail = IMAGES.images[key];
 	return tail ? `${IMAGES.cdn}${tail}/96fx96f` : null;
 }

@@ -16,10 +16,9 @@ const APPLY_STICKER = 1086;
 const SLOTS = 5;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const NAMES = cat.loadMap('names.json');
-const IMAGES = cat.loadMap('images.json');
 
 const stickerName = id => NAMES[`sticker:${id}`] || `Sticker #${id}`;
-const stickerImage = id => { const t = IMAGES.images && IMAGES.images[`sticker:${id}`]; return t ? `${IMAGES.cdn}${t}/96fx96f` : null; };
+const stickerImage = id => cat.stickerIcon(id);
 const isWeapon = it => !it.casket_id && it.def_index > 0 && it.def_index < 100
 	&& BigInt(it.id) < 0xF000000000000000n && it.origin !== 18;  // 18 = предмет-превью (не ваш)
 

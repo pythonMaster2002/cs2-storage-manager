@@ -81,7 +81,7 @@ const META_SOURCES = {
 const META_FILE = 'store_meta.json';
 // Версия алгоритма сборки: кэш, собранный старым кодом (например, с «конвертами» вместо картинок),
 // игнорируется и пересобирается сразу, не дожидаясь суточного обновления.
-const META_VERSION = 5;
+const META_VERSION = 6;
 
 function getText(url, timeout = 60000) {
 	return new Promise((resolve, reject) => {
@@ -202,8 +202,36 @@ function buildStoreMeta(itemsGameText, englishText, imagesMap) {
 		}
 		if (name || image) defs[id] = envelope ? { name, image, generic: true } : { name, image };
 	}
-	return { v: META_VERSION, built: Date.now(), links, defs, armory: buildArmory(ig, tr, links, defs, imagesMap), tradeup: buildTradeUp(ig, tr) };
+	return { v: META_VERSION, built: Date.now(), links, defs, armory: buildArmory(ig, tr, links, defs, imagesMap), tradeup: buildTradeUp(ig, tr),
+		...buildStickerIcons(ig, img) };
 }
+
+// Иконки наклеек и нашивок, которых нет в images.json (старые вроде Blacksite (Foil)): sticker_kits ->
+// материал -> econ/stickers/<материал> в картинках из файлов игры. Храним хвост пути без общего префикса.
+const ICON_CDN = 'https://cdn.steamstatic.com/apps/730/icons/';
+function buildStickerIcons(ig, img) {
+	const have = (loadMap('images.json').images) || {};
+	const stk = {};
+	for (const [id, k] of Object.entries(ig.sticker_kits || {})) {
+		if (!/^\d+$/.test(id) || !k || have[`sticker:${id}`]) continue;
+		const mat = k.sticker_material || k.patch_material;
+		const url = mat && (img(`econ/stickers/${mat}`) || img(`econ/patches/${mat}`));
+		if (url) stk[id] = url.startsWith(ICON_CDN) ? url.slice(ICON_CDN.length) : url;
+	}
+	return { stk, stkCdn: ICON_CDN };
+}
+
+// Картинка наклейки по id набора: images.json (CDN Steam, 96x96), иначе — из файлов игры (store_meta.stk).
+function stickerIcon(id) {
+	const IM = loadImages();
+	const t = IM.images && IM.images[`sticker:${id}`];
+	if (t) return `${IM.cdn}${t}/96fx96f`;
+	const m = storeMeta();
+	const u = m.stk && m.stk[id];
+	return u ? (/^https?:/.test(u) ? u : (m.stkCdn || ICON_CDN) + u) : null;
+}
+let _images = null;
+function loadImages() { if (!_images) _images = loadMap('images.json'); return _images; }
 
 // Контракты обмена: для каждого скина ("def:paint") — коллекция, редкость в ней и диапазон float.
 // Коллекции — item_sets; редкость — из списков client_loot_lists вида <набор>_<редкость>;
@@ -308,4 +336,4 @@ function loadSupport() {
 	return out;
 }
 
-module.exports = { loadSupport, loadMap, refresh, BUNDLED, FILES, storeMeta, refreshStoreMeta, buildStoreMeta, META_SOURCES, META_VERSION };
+module.exports = { loadSupport, loadMap, refresh, BUNDLED, FILES, storeMeta, refreshStoreMeta, buildStoreMeta, META_SOURCES, META_VERSION, stickerIcon };
