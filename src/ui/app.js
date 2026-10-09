@@ -1182,6 +1182,16 @@ function selectTuGroup(rarity, stattrak) {
 
 const EYE = '<svg viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>';
 const fl4 = f => f == null ? '—' : Number(f).toFixed(4);
+// Полоса износа (как на Торговой площадке со SIH): сегменты качеств FN/MW/FT/WW/BS и метка ^ под float.
+// min/max — возможный диапазон скина (вне его полоса затемнена); marks — одна или несколько отметок.
+const WEAR_SEGS = [[0, 0.07, 'fn'], [0.07, 0.15, 'mw'], [0.15, 0.38, 'ft'], [0.38, 0.45, 'ww'], [0.45, 1, 'bs']];
+function floatBar(marks, { min = 0, max = 1, cls = '' } = {}) {
+	const pct = v => `${(Math.min(1, Math.max(0, v)) * 100).toFixed(2)}%`;
+	const list = (Array.isArray(marks) ? marks : [marks]).filter(f => f != null);
+	return `<div class="fbar ${cls}"><div class="fbar-track">${WEAR_SEGS.map(([a, b, c]) => `<i class="${c}" style="left:${pct(a)};width:${pct(b - a)}"></i>`).join('')}
+		${min > 0 ? `<b class="fbar-off" style="left:0;width:${pct(min)}"></b>` : ''}${max < 1 ? `<b class="fbar-off" style="left:${pct(max)};right:0"></b>` : ''}</div>
+		${list.map(f => `<span class="fbar-mark" style="left:${pct(f)}"></span>`).join('')}</div>`;
+}
 const marketUrl = name => `https://steamcommunity.com/market/listings/730/${encodeURIComponent(name)}`;
 const tuTotal = () => Object.values(ui.tu.picks).reduce((a, b) => a + b, 0);
 // Выбранные id: у каждого скина берутся первые N (сервер сортирует их по float — от меньшего).
@@ -1222,7 +1232,7 @@ function tuFloatRange(i) {
 	const f = (i.floats || []).filter(x => x != null);
 	if (!f.length) return '';
 	const lo = Math.min(...f), hi = Math.max(...f);
-	return `<div class="tu-float">float ${fl4(lo)}${hi !== lo ? ` – ${fl4(hi)}` : ''}</div>`;
+	return `<div class="tu-float">float ${fl4(lo)}${hi !== lo ? ` – ${fl4(hi)}` : ''}</div>${floatBar(f.length > 3 ? [lo, hi] : f, { cls: 'sm' })}`;
 }
 
 function renderTuTray() {
@@ -1238,7 +1248,7 @@ function renderTuTray() {
 		if (!sl) return `<div class="tu-slot"><span>${i + 1}</span></div>`;
 		const it = sl.it, link = insp.get(sl.id);
 		return `<div class="tu-slot full r${g.rarity}" data-tuminus="${esc(it.name)}" title="${esc(it.name)}${sl.float != null ? ` · float ${fl4(sl.float)}` : ''}">${it.image ? `<img src="${esc(it.image)}" alt="">` : `<span>${esc(it.name.slice(0, 10))}</span>`}
-			${sl.float != null ? `<span class="tu-slot-fl">${fl4(sl.float)}</span>` : ''}
+			${sl.float != null ? `<span class="tu-slot-fl">${fl4(sl.float)}</span>${floatBar(sl.float, { cls: 'xs' })}` : ''}
 			${link ? `<button class="tu-eye small" data-insp-game="${esc(link)}" title="${esc(t('craft_inspect'))}">${EYE}</button>` : ''}</div>`;
 	}).join('');
 }
@@ -1280,6 +1290,7 @@ function renderTuOdds() {
 			<div class="tu-out-body">
 				<div class="tu-out-name" title="${esc(o.name)}">${esc(o.name)}</div>
 				<div class="muted small">${o.float != null ? `float ≈ ${fl4(o.float)} · ${esc(o.exterior)}` : esc(o.collection || '')}</div>
+				${o.float != null ? floatBar(o.float, { min: o.min, max: o.max, cls: 'sm' }) : ''}
 				<div class="tu-out-bar"><i style="width:${Math.max(2, o.chance * 100).toFixed(1)}%"></i></div>
 			</div>
 			<div class="tu-out-side"><b>${(o.chance * 100).toFixed(o.chance < 0.1 ? 1 : 0)}%</b>
@@ -1304,7 +1315,7 @@ function showCraftResult(r) {
 	$('craftName').textContent = r.name || t('tradeup_done_unknown');
 	$('craftGrade').textContent = r.rarity ? ((r.stattrak ? 'StatTrak™ ' : '') + (RARITY_NAMES[r.rarity] || '')) : '';
 	$('craftGrade').classList.toggle('hidden', !r.rarity);
-	$('craftFloat').textContent = r.float != null ? `float ${Number(r.float).toFixed(6)}` : '';
+	$('craftFloat').innerHTML = r.float != null ? `<div>float ${Number(r.float).toFixed(6)}</div>${floatBar(r.float)}` : '';
 	// «На Торговой площадке» — сразу (по названию); «Осмотреть» — когда предмет появится в веб-инвентаре
 	$('craftMarket').classList.toggle('hidden', !r.name);
 	$('craftMarket').onclick = () => openExt(marketUrl(r.name));
