@@ -40,8 +40,16 @@ const isStorable = item => isRealItem(item) && !NONSTORABLE.has(item.def_index);
 // Трейд-ап (контракт обмена): входом может быть скин оружия (есть paint_index), редкости
 // Consumer..Classified (1..5; Covert 6 и выше — нельзя), не сувенир (quality 12), не в ящике.
 const TRADEUP_MAX_RARITY = 5;
+// Обычные контракты (рецепты 0–4 в items_game) принимают качество unique и tournament (сувениры), в том числе вперемешку.
 const isTradeUpInput = item => isRealItem(item) && !item.casket_id && item.paint_index > 0
-	&& item.rarity >= 1 && item.rarity <= TRADEUP_MAX_RARITY && item.quality !== 12;
+	&& item.rarity >= 1 && item.rarity <= TRADEUP_MAX_RARITY;
+// В коллекции скина нет предметов следующей редкости (null — нет данных о скине).
+function tradeUpTopTier(item) {
+	const tu = catalog.storeMeta().tradeup;
+	const sk = tu && tu.skins[`${item.def_index}:${Math.round(item.paint_index || 0)}`];
+	if (!sk) return null;
+	return !Object.values(tu.skins).some(v => v[0] === sk[0] && v[1] === sk[1] + 1);
+}
 const isStatTrak = item => item.quality === 9 || item.kill_eater_value !== undefined;
 
 function waitFor(emitter, event, ms, what) {
@@ -633,13 +641,16 @@ class CasketSession extends EventEmitter {
 					const ids = [...x.ids.filter(id => !stored.has(id)).sort(byWear), ...x.ids.filter(id => stored.has(id)).sort(byWear)];
 					const floats = ids.map(id => { const it = this._tuPool.get(id); return it && it.paint_wear != null ? Number(it.paint_wear.toFixed(6)) : null; });
 					const insp = web && ids.map(id => web.inspect.get(id)).find(Boolean);
-					return { ...x, ids, floats, stored: x.ids.filter(id => stored.has(id)).length, inspect: insp || null };
+					// самый редкий скин своей коллекции в контракт не берётся (игра не даёт): выше в коллекции ничего нет
+					const one = this._tuPool.get(ids[0]);
+					return { ...x, ids, floats, stored: x.ids.filter(id => stored.has(id)).length, inspect: insp || null, noUpgrade: Boolean(one && tradeUpTopTier(one)) };
 				}),
 			}))
 			.sort((a, b) => a.rarity - b.rarity || a.stattrak - b.stattrak);
 	}
 
 	// Прогноз контракта: возможные исходы с шансами и ожидаемым float результата.
+	// (topTier — предметы без следующей редкости в коллекции; игра их не примет)
 	// Шанс: каждый вход даёт 1/N своей коллекции, внутри коллекции исходы следующей редкости равновероятны.
 	// Float (≈, формула CS2): средний нормализованный float входов (f − min) / (max − min),
 	// перенесённый в диапазон float результата.
@@ -660,10 +671,11 @@ class CasketSession extends EventEmitter {
 		for (const [k, v] of Object.entries(tu.skins)) if (v[1] === rarity + 1) { if (!tier.has(v[0])) tier.set(v[0], []); tier.get(v[0]).push(k); }
 		let normSum = 0, normN = 0;
 		const chance = new Map();
+		out.topTier = [];
 		for (const it of items) {
 			const sk = skin(it);
 			const outs = sk && tier.get(sk[0]);
-			if (!outs) { out.unknown.push(itemName(it)); continue; }
+			if (!outs) { (sk ? out.topTier : out.unknown).push(itemName(it)); continue; }
 			if (it.paint_wear != null) { normSum += Math.min(1, Math.max(0, (it.paint_wear - sk[2]) / ((sk[3] - sk[2]) || 1))); normN++; }
 			for (const k of outs) chance.set(k, (chance.get(k) || 0) + 1 / (items.length * outs.length));
 		}
@@ -727,6 +739,8 @@ class CasketSession extends EventEmitter {
 		const st = isStatTrak(items[0]);
 		if (items.some(i => i.rarity !== rarity)) throw new Error('все 10 предметов должны быть одной редкости');
 		if (items.some(i => isStatTrak(i) !== st)) throw new Error('нельзя смешивать StatTrak и обычные предметы');
+		const top = items.find(i => tradeUpTopTier(i));
+		if (top) throw new Error(`«${itemName(top)}» нельзя использовать: в его коллекции нет предметов выше`);
 		const recipe = (st ? 10 : 0) + (rarity - 1);  // 0..4 обычные, 10..14 StatTrak
 		const before = new Set(this.csgo.inventory.map(i => String(i.id)));
 		this.csgo.craft(items.map(i => i.id), recipe);

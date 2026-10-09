@@ -792,3 +792,9 @@ img.avatar { object-fit: cover; padding: 0; background: var(--panel-2); }
 .fbar.xs .fbar-mark { top: 3px; border-left-width: 3px; border-right-width: 3px; border-bottom-width: 4px; }
 .tu-card .fbar-mark { opacity: .85; }
 .craft-float .fbar { width: 220px; margin: 6px auto 0; }
+
+.tu-card.blocked { cursor: not-allowed; }
+.tu-block { position: absolute; top: 8px; left: 8px; z-index: 1; padding: 1px 7px; border-radius: 99px; background: rgba(255, 92, 92, .16); color: var(--bad); font-size: 10.5px; font-weight: 700; }
+.st-float { display: flex; align-items: center; gap: 10px; margin: 2px 0 6px; }
+.st-float .fbar { width: 170px; margin-top: 4px; }
+.st-wear { font-size: 10.5px; color: var(--muted); }

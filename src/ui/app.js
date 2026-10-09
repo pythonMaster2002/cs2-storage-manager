@@ -1215,7 +1215,8 @@ function renderTuItems() {
 	$('tuItems').innerHTML = items.map(i => {
 		const n = ui.tu.picks[i.name] || 0;
 		const full = tuTotal() >= 10 && !n;
-		return `<div class="tu-card r${g.rarity} ${n ? 'picked' : ''} ${full ? 'dim' : ''}" data-tu="${esc(i.name)}" title="${esc(i.name)}">
+		return `<div class="tu-card r${g.rarity} ${n ? 'picked' : ''} ${full || i.noUpgrade ? 'dim' : ''} ${i.noUpgrade ? 'blocked' : ''}" data-tu="${esc(i.name)}" title="${esc(i.noUpgrade ? t('tu_no_upgrade') : i.name)}">
+			${i.noUpgrade ? `<span class="tu-block">${esc(t('tu_no_upgrade_short'))}</span>` : ''}
 			${n ? `<span class="tu-n">×${n}</span><button class="tu-minus" data-tuminus="${esc(i.name)}">−</button>` : ''}
 			<div class="tu-img">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy">` : ''}</div>
 			${i.inspect ? `<button class="tu-eye" data-insp-game="${esc(i.inspect)}" title="${esc(t('craft_inspect'))}">${EYE}</button>` : ''}
@@ -1284,7 +1285,8 @@ function renderTuOdds() {
 	if (p.avgFloat != null) sub.push(`${t('tu_avg_float')}: ${fl4(p.avgFloat)}`);
 	$('tuOddsSub').textContent = sub.join(' · ');
 	const nextColor = RARITY_COLORS[g.rarity + 1] || '#8847ff';
-	$('tuOddsList').innerHTML = (p.unknown && p.unknown.length ? `<div class="tu-odds-warn">${esc(t('tu_unknown', { names: [...new Set(p.unknown)].join(', ') }))}</div>` : '')
+	$('tuOddsList').innerHTML = (p.topTier && p.topTier.length ? `<div class="tu-odds-warn">${esc(t('tu_top_tier', { names: [...new Set(p.topTier)].join(', ') }))}</div>` : '')
+		+ (p.unknown && p.unknown.length ? `<div class="tu-odds-warn">${esc(t('tu_unknown', { names: [...new Set(p.unknown)].join(', ') }))}</div>` : '')
 		+ p.outcomes.map(o => `<div class="tu-out" style="--rc:${nextColor}">
 			<div class="tu-out-img">${o.image ? `<img src="${esc(o.image)}" alt="" loading="lazy">` : ''}</div>
 			<div class="tu-out-body">
@@ -1356,6 +1358,7 @@ $('tuItems').addEventListener('click', e => {
 	if (minus) { const name = minus.dataset.tuminus; tuSetPick(name, (ui.tu.picks[name] || 0) - 1, 999); renderTuItems(); return; }
 	if (card) {
 		const it = g.items.find(x => x.name === card.dataset.tu);
+		if (it && it.noUpgrade) { toast(t('tu_no_upgrade'), 'bad'); return; }
 		if (it && tuTotal() < 10) { tuSetPick(it.name, (ui.tu.picks[it.name] || 0) + 1, it.count); renderTuItems(); }
 	}
 });
@@ -1949,14 +1952,20 @@ function renderStickers() {
 		: `<div class="empty-box">${esc(t('st_no_stickers'))}</div>`;
 	const ws = d.weapons.filter(w => !q || w.name.toLowerCase().includes(q) || w.stickers.some(s => s.name.toLowerCase().includes(q)));
 	$('stWeapons').innerHTML = ws.length ? ws.map(w => {
-		const slots = Array.from({ length: d.slots }, (_, i) => {
-			const s = w.stickers.find(x => x.slot === i);
-			if (s) return `<div class="st-slot full" title="${esc(s.name)} · ${t('st_wear')} ${Math.round(s.wear * 100)}%">${s.image ? `<img src="${esc(s.image)}" alt="">` : ''}<div class="nm">${esc(s.name.replace(/^Sticker \| /, ''))}</div>
-				<div class="acts"><button data-scrape="${esc(w.id)}" data-slot="${i}">${esc(t('st_scrape'))}</button><button class="rm" data-remove="${esc(w.id)}" data-slot="${i}">${esc(t('delete'))}</button></div></div>`;
-			return sel ? `<div class="st-slot target" data-put="${esc(w.id)}" data-slot="${i}">+ ${esc(t('st_put'))}</div>` : `<div class="st-slot"><span class="muted">${i + 1}</span></div>`;
-		}).join('');
-		const insp = w.inspect ? `<span class="st-insp"><button class="btn ghost small" data-insp-game="${esc(w.inspect)}">${esc(t('inspect_game'))}</button><button class="btn ghost small" data-insp-copy="${esc(w.inspect)}">${esc(t('copy_link'))}</button></span>` : '';
-		return `<div class="st-w">${w.image ? `<img src="${esc(w.image)}" alt="" loading="lazy">` : '<span class="ph"></span>'}<div><div class="st-wh"><span class="strong">${esc(w.name)}</span>${insp}</div><div class="st-slots">${slots}</div></div></div>`;
+		// все наклейки (по позиции на модели), затем свободные позиции; действия — по индексу атрибута (s.slot)
+		const placed = w.stickers.map(s => `<div class="st-slot full" title="${esc(s.name)} · ${t('st_wear')} ${Math.round(s.wear * 100)}%">${s.image ? `<img src="${esc(s.image)}" alt="">` : ''}<div class="nm">${esc(s.name.replace(/^Sticker \| /, ''))}</div>
+				<div class="st-wear">${t('st_wear')} ${Math.round(s.wear * 100)}%</div>
+				<div class="acts"><button data-scrape="${esc(w.id)}" data-slot="${s.slot}">${esc(t('st_scrape'))}</button><button class="rm" data-remove="${esc(w.id)}" data-slot="${s.slot}">${esc(t('delete'))}</button></div></div>`);
+		const usedPos = new Set(w.stickers.map(s => s.pos));
+		const free = Array.from({ length: d.slots }, (_, i) => i).filter(i => !usedPos.has(i)).slice(0, Math.max(0, d.slots - w.stickers.length));
+		const empty = free.map(i => sel ? `<div class="st-slot target" data-put="${esc(w.id)}" data-slot="${i}">+ ${esc(t('st_put'))}</div>` : `<div class="st-slot"><span class="muted">${i + 1}</span></div>`);
+		const slots = [...placed, ...empty].join('');
+		const acts = [
+			w.inspect ? `<button class="btn ghost small" data-insp-game="${esc(w.inspect)}">${esc(t('inspect_game'))}</button><button class="btn ghost small" data-insp-copy="${esc(w.inspect)}">${esc(t('copy_link'))}</button>` : '',
+			w.invLink ? `<button class="btn ghost small" data-open-inv="${esc(w.invLink)}">${esc(t('st_in_inventory'))}</button>` : '',
+		].join('');
+		const fl = w.float != null ? `<div class="st-float"><span class="muted small">float ${fl4(w.float)}</span>${floatBar(w.float, { cls: 'sm' })}</div>` : '';
+		return `<div class="st-w">${w.image ? `<img src="${esc(w.image)}" alt="" loading="lazy">` : '<span class="ph"></span>'}<div><div class="st-wh"><span class="strong">${esc(w.name)}</span>${acts ? `<span class="st-insp">${acts}</span>` : ''}</div>${fl}<div class="st-slots">${slots}</div></div></div>`;
 	}).join('') : `<div class="empty-box">${esc(t('st_no_weapons'))}</div>`;
 }
 
@@ -1997,6 +2006,7 @@ $('stWeapons').addEventListener('click', e => {
 	const d = e.target.dataset;
 	if (d.inspGame) openExt(d.inspGame);
 	if (d.inspCopy) copyText(d.inspCopy);
+	if (d.openInv) openExt(d.openInv);
 	if (d.put) stickerApply(d.put, Number(d.slot));
 	if (d.scrape) stickerAct('/api/stickers/scrape', { weaponId: d.scrape, slot: Number(d.slot) }, t('st_scraped'));
 	if (d.remove) stickerRemove(d.remove, Number(d.slot));
