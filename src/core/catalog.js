@@ -81,7 +81,7 @@ const META_SOURCES = {
 const META_FILE = 'store_meta.json';
 // Версия алгоритма сборки: кэш, собранный старым кодом (например, с «конвертами» вместо картинок),
 // игнорируется и пересобирается сразу, не дожидаясь суточного обновления.
-const META_VERSION = 4;
+const META_VERSION = 5;
 
 function getText(url, timeout = 60000) {
 	return new Promise((resolve, reject) => {
@@ -219,12 +219,15 @@ function buildTradeUp(ig, tr) {
 		if (!/^\d+$/.test(id) || !k || !k.name) continue;
 		kitByName[k.name] = { id: Number(id), min: Number(k.wear_remap_min ?? base.wear_remap_min ?? 0.06), max: Number(k.wear_remap_max ?? base.wear_remap_max ?? 0.8) };
 	}
-	const rarity = {};
+	const rarity = {}, fallback = [];
 	for (const [list, entries] of Object.entries(ig.client_loot_lists || {})) {
 		const m = list.match(/_(common|uncommon|rare|mythical|legendary|ancient)$/);
 		if (!m || !entries || typeof entries !== 'object') continue;
 		for (const key of Object.keys(entries)) if (key.startsWith('[') && !(key in rarity)) rarity[key] = RARITY_BY_SUFFIX[m[1]];
 	}
+	// Коллекции без списков выпадения по редкостям (промо вроде The Blacksite Collection) — редкость
+	// берём из paint_kits_rarity самой краски.
+	const kitRarity = ig.paint_kits_rarity || {};
 	const sets = [], skins = {};
 	for (const [setKey, set] of Object.entries(ig.item_sets || {})) {
 		if (!set || !set.items || typeof set.items !== 'object') continue;
@@ -232,6 +235,7 @@ function buildTradeUp(ig, tr) {
 		for (const key of Object.keys(set.items)) {
 			const m = key.match(/^\[(.+)\](weapon_\w+)$/);
 			const kit = m && kitByName[m[1]], def = m && weaponDef[m[2]];
+			if (!rarity[key] && m && RARITY_BY_SUFFIX[kitRarity[m[1]]]) { rarity[key] = RARITY_BY_SUFFIX[kitRarity[m[1]]]; fallback.push(`${setKey}:${key}`); }
 			if (!kit || def == null || !rarity[key]) continue;
 			const k = `${def}:${kit.id}`;
 			if (skins[k]) continue;
@@ -239,6 +243,7 @@ function buildTradeUp(ig, tr) {
 			skins[k] = [idx, rarity[key], kit.min, kit.max];
 		}
 	}
+	if (process.env.CASKIT_DEBUG_TU) console.log('tradeup: редкость из paint_kits_rarity:', fallback.length, fallback.slice(0, 40));
 	return { sets, skins };
 }
 

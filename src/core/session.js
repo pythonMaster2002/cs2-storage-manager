@@ -633,19 +633,26 @@ class CasketSession extends EventEmitter {
 		}
 		const stored = this._storedTradeUp;
 		return [...groups.values()]
-			.map(g => ({
-				rarity: g.rarity, stattrak: g.stattrak, total: g.raw.length,
-				// сначала предметы из инвентаря (из ящиков — только если не хватает), внутри — от меньшего float
-				items: group(g.raw).map(x => {
+			.map(g => {
+				// Заранее отсекаем то, что игра в контракт не пустит: результат берётся из коллекций входов
+				// следующей редкостью (crafting.js / CSGO_Recipe_TradeUp_Desc), поэтому скин, выше которого в его
+				// коллекции ничего нет (top), использовать нельзя. Защита обмена контракту не мешает.
+				const items = group(g.raw).map(x => {
 					const byWear = (a, b) => wear(a) - wear(b);
-					const ids = [...x.ids.filter(id => !stored.has(id)).sort(byWear), ...x.ids.filter(id => stored.has(id)).sort(byWear)];
+					const one = this._tuPool.get(x.ids[0]);
+					const top = Boolean(one && tradeUpTopTier(one));
+					const usable = top ? [] : x.ids;
+					// сначала предметы из инвентаря (из ящиков — только если не хватает), внутри — от меньшего float
+					const ids = [...usable.filter(id => !stored.has(id)).sort(byWear), ...usable.filter(id => stored.has(id)).sort(byWear)];
 					const floats = ids.map(id => { const it = this._tuPool.get(id); return it && it.paint_wear != null ? Number(it.paint_wear.toFixed(6)) : null; });
-					const insp = web && ids.map(id => web.inspect.get(id)).find(Boolean);
-					// самый редкий скин своей коллекции в контракт не берётся (игра не даёт): выше в коллекции ничего нет
-					const one = this._tuPool.get(ids[0]);
-					return { ...x, ids, floats, stored: x.ids.filter(id => stored.has(id)).length, inspect: insp || null, noUpgrade: Boolean(one && tradeUpTopTier(one)) };
-				}),
-			}))
+					const insp = web && [...ids, ...x.ids].map(id => web.inspect.get(id)).find(Boolean);
+					const allFloats = x.ids.map(id => { const it = this._tuPool.get(id); return it && it.paint_wear != null ? Number(it.paint_wear.toFixed(6)) : null; });
+					return { name: x.name, image: x.image, count: ids.length, all: x.count, ids, floats: top || !ids.length ? allFloats : floats,
+						stored: ids.filter(id => stored.has(id)).length, inspect: insp || null,
+						blocked: top ? 'top' : null };
+				}).sort((a, b) => Boolean(a.blocked) - Boolean(b.blocked) || b.count - a.count || a.name.localeCompare(b.name));
+				return { rarity: g.rarity, stattrak: g.stattrak, total: items.reduce((n, i) => n + i.count, 0), items };
+			})
 			.sort((a, b) => a.rarity - b.rarity || a.stattrak - b.stattrak);
 	}
 
@@ -731,6 +738,10 @@ class CasketSession extends EventEmitter {
 	async craftTradeUp(itemIds) {
 		this.ensureOnline();
 		if (!Array.isArray(itemIds) || itemIds.length !== 10) throw new Error('для контракта нужно ровно 10 предметов');
+		// «выше нет» проверяем до того, как вынимать предметы из ящиков
+		const pool = this._tuPool || new Map();
+		const early = itemIds.map(id => pool.get(String(id)) || this.csgo.inventory.find(i => String(i.id) === String(id))).find(i => i && tradeUpTopTier(i));
+		if (early) throw new Error(`«${itemName(early)}» нельзя использовать: в его коллекции нет предметов выше`);
 		await this._takeForTradeUp(itemIds.map(String));
 		const items = itemIds.map(id => this.csgo.inventory.find(i => String(i.id) === String(id)));
 		if (items.some(i => !i)) throw new Error('какой-то из выбранных предметов не найден в инвентаре');

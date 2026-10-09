@@ -1215,13 +1215,13 @@ function renderTuItems() {
 	$('tuItems').innerHTML = items.map(i => {
 		const n = ui.tu.picks[i.name] || 0;
 		const full = tuTotal() >= 10 && !n;
-		return `<div class="tu-card r${g.rarity} ${n ? 'picked' : ''} ${full || i.noUpgrade ? 'dim' : ''} ${i.noUpgrade ? 'blocked' : ''}" data-tu="${esc(i.name)}" title="${esc(i.noUpgrade ? t('tu_no_upgrade') : i.name)}">
-			${i.noUpgrade ? `<span class="tu-block">${esc(t('tu_no_upgrade_short'))}</span>` : ''}
+		return `<div class="tu-card r${g.rarity} ${n ? 'picked' : ''} ${full || (i.blocked === 'top') ? 'dim' : ''} ${(i.blocked === 'top') ? 'blocked' : ''}" data-tu="${esc(i.name)}" title="${esc((i.blocked === 'top') ? t('tu_no_upgrade') : i.name)}">
+			${(i.blocked === 'top') ? `<span class="tu-block">${esc(t('tu_no_upgrade_short'))}</span>` : ''}
 			${n ? `<span class="tu-n">×${n}</span><button class="tu-minus" data-tuminus="${esc(i.name)}">−</button>` : ''}
 			<div class="tu-img">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy">` : ''}</div>
 			${i.inspect ? `<button class="tu-eye" data-insp-game="${esc(i.inspect)}" title="${esc(t('craft_inspect'))}">${EYE}</button>` : ''}
 			<div class="tu-name">${esc(i.name)}</div>
-			<div class="tu-sub">${t('in_inventory')}: ${fmt(i.count - (i.stored || 0))}${i.stored ? ` · ${t('in_casket')}: ${fmt(i.stored)}` : ''}</div>
+			<div class="tu-sub">${t('in_inventory')}: ${fmt((i.blocked ? i.all || i.count : i.count) - (i.stored || 0))}${i.stored ? ` · ${t('in_casket')}: ${fmt(i.stored)}` : ''}</div>
 			${tuFloatRange(i)}
 		</div>`;
 	}).join('') || `<div class="empty-box">${esc(t('nothing_found'))}</div>`;
@@ -1358,7 +1358,7 @@ $('tuItems').addEventListener('click', e => {
 	if (minus) { const name = minus.dataset.tuminus; tuSetPick(name, (ui.tu.picks[name] || 0) - 1, 999); renderTuItems(); return; }
 	if (card) {
 		const it = g.items.find(x => x.name === card.dataset.tu);
-		if (it && it.noUpgrade) { toast(t('tu_no_upgrade'), 'bad'); return; }
+		if (it && it.blocked) { toast(t('tu_no_upgrade'), 'bad'); return; }
 		if (it && tuTotal() < 10) { tuSetPick(it.name, (ui.tu.picks[it.name] || 0) + 1, it.count); renderTuItems(); }
 	}
 });
