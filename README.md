@@ -29,7 +29,7 @@ No subscriptions, no third-party servers: everything runs on your computer and t
 
 <p align="center"><img src="docs/screenshots/demo.gif" alt="Caskit: storing 60 cases into a storage unit, then a trade-up with outcome chances" width="900"></p>
 
-> **Coming from Casemove?** Its last release was in December 2024. Caskit covers the same storage-unit workflow and adds trade-up odds and floats, stickers, the CS2 store, trades and the Community Market, a built-in Steam Guard and several accounts with their own proxies — and it is actively maintained.
+> **Coming from Casemove?** Its author has discontinued it in favour of Skinledger — “Casemove 2.0”, a paid service: the free version only moves items, while fast transfers, store purchases, trade-ups, Armory, more accounts, trades and market tools need a subscription of $9.99–24.99 per month ([Skinledger FAQ](https://skinledger.com/#frequently-asked-questions), [pricing](https://skinledger.com/en/pricing-compare), October 2026). Caskit does all of that **for free**, with no account on anyone's website — and the code is open.
 
 ## Features
 

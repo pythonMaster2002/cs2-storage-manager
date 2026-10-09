@@ -29,7 +29,7 @@ Sin suscripciones ni servidores de terceros: todo funciona en tu ordenador y hab
 
 <p align="center"><img src="screenshots/demo.gif" alt="Caskit" width="900"></p>
 
-> **¿Vienes de Casemove?** Su última versión salió en diciembre de 2024. Caskit cubre el mismo flujo con contenedores y añade probabilidades y floats de contratos, pegatinas, la tienda de CS2, intercambios y el Mercado, un Steam Guard integrado y varias cuentas con su propio proxy, y se mantiene activamente.
+> **¿Vienes de Casemove?** Su autor lo abandonó en favor de Skinledger — «Casemove 2.0», un servicio de pago: la versión gratuita solo mueve objetos; los traslados rápidos, las compras en la tienda, los contratos, el Armory, más cuentas, los intercambios y el mercado cuestan 9,99–24,99 $ al mes ([FAQ de Skinledger](https://skinledger.com/#frequently-asked-questions), [precios](https://skinledger.com/en/pricing-compare), octubre de 2026). Caskit hace todo eso **gratis**, sin cuentas en webs ajenas y con código abierto.
 
 ## Funciones
 

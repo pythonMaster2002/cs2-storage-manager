@@ -29,7 +29,7 @@ Abonelik ve üçüncü taraf sunucu yok: her şey bilgisayarınızda çalışır
 
 <p align="center"><img src="screenshots/demo.gif" alt="Caskit" width="900"></p>
 
-> **Casemove’dan mı geliyorsunuz?** Son sürümü Aralık 2024’te çıktı. Caskit depolarla aynı işi yapar; ayrıca kontrat şansları ve float, çıkartmalar, CS2 mağazası, takaslar ve Pazar, dahili Steam Guard ve kendi proxy’si olan birden çok hesap sunar — ve aktif olarak geliştiriliyor.
+> **Casemove’dan mı geliyorsunuz?** Yazarı onu Skinledger lehine bıraktı — «Casemove 2.0» adlı ücretli bir hizmet: ücretsiz sürüm yalnızca eşya taşır; hızlı aktarım, mağaza alımları, kontratlar, Armory, daha fazla hesap, takaslar ve pazar ayda 9,99–24,99 $ abonelik ister ([Skinledger SSS](https://skinledger.com/#frequently-asked-questions), [fiyatlar](https://skinledger.com/en/pricing-compare), Ekim 2026). Caskit bunların hepsini **ücretsiz**, başka sitelerde hesap açmadan ve açık kaynak olarak yapar.
 
 ## Özellikler
 
