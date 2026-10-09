@@ -141,8 +141,8 @@ npm run build:mac      # dmg + zip (macOS only)
 Windows releases are built from this repository by [GitHub Actions](.github/workflows/release.yml) and are intended to be signed through SignPath. Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
 *Status: the application is in progress — until it is approved, releases are unsigned.*
 
-- Committers and reviewers: [mikidjus](https://github.com/pythonMaster2002)
-- Approvers: [mikidjus](https://github.com/pythonMaster2002)
+- Committers and reviewers: [@pythonMaster2002](https://github.com/pythonMaster2002)
+- Approvers: [@pythonMaster2002](https://github.com/pythonMaster2002)
 
 Every signed release is built by CI from a tagged commit and manually approved before signing.
 Privacy: see the [privacy policy](PRIVACY.md) — Caskit has no telemetry and sends data only to the services listed there.
