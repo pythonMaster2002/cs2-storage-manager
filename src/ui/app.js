@@ -4,6 +4,7 @@ const TOKEN = location.hash.slice(1);
 const CFG = window.APP_CONFIG || {};
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 const fmt = n => Number(n).toLocaleString(LANG === 'zh' ? 'zh-CN' : LANG);
 
 // ============================================================ локализация
@@ -27,12 +28,16 @@ function applyStaticI18n() {
 	document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
 }
 
-function setLang(l) {
+// Смена языка: сохраняем в настройках приложения (localStorage привязан к случайному порту и теряется
+// между запусками) и перезагружаем интерфейс — так переводится всё, включая уже открытые списки.
+function setLang(l, reload = true) {
 	LANG = l;
 	try { localStorage.setItem('lang', l); } catch (e) { /* ignore */ }
 	[$('langSelect'), $('langSelect2'), $('langSelect3')].forEach(sel => { if (sel) sel.value = l; });
 	applyStaticI18n();
-	rerenderAll();
+	if (!reload) { rerenderAll(); return; }
+	try { sessionStorage.setItem('ui_restore', JSON.stringify({ tab: ui.tab, active: ui.active, welcome: !$('welcomeModal').classList.contains('hidden') })); } catch (e) { /* ignore */ }
+	api('/api/settings', { lang: l }).catch(() => {}).then(() => location.reload());
 }
 
 function fillLangSelects() {
@@ -53,7 +58,7 @@ function rerenderAll() {
 
 // ============================================================ состояние
 const ui = {
-	mode: 'qr', maFile: null,
+	mode: 'creds', maFile: null,
 	status: null, active: null, state: null,
 	casketId: null, op: 'store', contents: {}, picks: {},
 	search: '', onlyCases: false, showFull: false, loadingItems: false,
@@ -113,7 +118,7 @@ function setMode(mode) {
 }
 
 async function renderSaved() {
-	const list = await api('/api/accounts').catch(() => []);
+	const list = ui.saved = await api('/api/accounts').catch(() => []);
 	const connected = new Set((ui.status && ui.status.accounts || []).map(a => a.login));
 	const rest = list.filter(a => !connected.has(a.login));
 	$('savedBlock').classList.toggle('hidden', !rest.length);
@@ -185,6 +190,7 @@ function renderAccounts(s) {
 	if (ui.addingAccount || accounts.length === 0) { renderLoginFlow(pending, accounts.length > 0); return; }
 
 	showView('mainView');
+	if (ui.restoreTab) { const tab = ui.restoreTab; ui.restoreTab = null; setTimeout(() => switchTab(tab), 0); }
 	maybeTour();
 	$('guardModal').classList.add('hidden');
 	renderAccountBar(accounts, pending);
@@ -280,8 +286,12 @@ function handleActiveJob(active) {
 		ui.contents = {};
 		loadState().catch(() => {});
 		if (ui.op === 'take' && ui.casketId) loadContents(ui.casketId, true).then(renderItems);
-		toast(job.error ? t('done_err', { e: job.error }) : t('done_ok', { n: fmt(job.done) }), job.error ? 'bad' : 'good');
-		if (!job.error && job.done >= 50) setTimeout(() => nudgeSupport(t('nudge_moved', { n: fmt(job.done), s: Math.max(1, Math.round((job.ended - job.started) / 1000)) })), 1500);
+		const secs = Math.max(1, Math.round(((job.ended || Date.now()) - job.started) / 1000));
+		if (!job.error && ui.settings.transferModal !== false) showTransferDone(job, secs);
+		else {
+			toast(job.error ? t('done_err', { e: job.error }) : t('done_ok', { n: fmt(job.done) }), job.error ? 'bad' : 'good');
+			if (!job.error && job.done >= 50) setTimeout(() => nudgeSupport(t('nudge_moved', { n: fmt(job.done), s: secs })), 1500);
+		}
 	}
 	ui.lastJobKey[active.login] = key;
 	renderJob(job);
@@ -455,6 +465,21 @@ async function runAction() {
 	} catch (e) { toast(e.message, 'bad'); }
 }
 
+// Итог перекладки — по центру, с OK. «Больше не показывать» -> дальше итог будет обычным уведомлением сбоку.
+async function showTransferDone(job, secs) {
+	const support = !ui.settings.supportHideNudges
+		? `<div class="td-support">♥ ${esc(t('td_support'))} <button class="btn support-btn small" id="tdSupport">${esc(t('support_short'))}</button></div>` : '';
+	const p = miniConfirm({
+		icon: ICON_OK, title: job.kind === 'store' ? t('td_stored', { name: job.casketName || '—' }) : t('td_taken', { name: job.casketName || '—' }),
+		text: t('td_text', { n: fmt(job.done), s: secs, v: (job.done / secs).toFixed(1) }),
+		extra: support, cancel: false, dontShow: true, dontText: t('td_dont_show'),
+	});
+	const b = document.getElementById('tdSupport');
+	if (b) b.onclick = () => { ui.miniAnswer && ui.miniAnswer(true); openSupport(); };
+	const r = await p;
+	if (r.dont) saveSetting({ transferModal: false });
+}
+
 // ============================================================ прогресс операции
 function renderJob(job) {
 	if (!job || ui.jobDismissed === job.started) { $('jobBanner').classList.add('hidden'); return; }
@@ -609,6 +634,8 @@ async function toggleFavorite(def) {
 async function loadSettings() {
 	try { ui.settings = await api('/api/settings'); } catch (e) { /* по умолчанию */ }
 	$('giftToggle').checked = ui.settings.autoAcceptGifts;
+	$('sideNav').classList.toggle('collapsed', Boolean(ui.settings.navCollapsed));
+	if (ui.settings.lang && ui.settings.lang !== LANG && window.I18N.dict[ui.settings.lang]) setLang(ui.settings.lang, false);
 	updateCartBtn();
 	maybeWelcome();
 }
@@ -616,6 +643,8 @@ async function loadSettings() {
 function openSettings() {
 	$('stickerConfirmToggle').checked = ui.settings.stickerConfirm !== false;
 	$('nudgeToggle').checked = !ui.settings.supportHideNudges;
+	$('turboToggle').checked = Boolean(ui.settings.turbo);
+	$('transferModalToggle').checked = ui.settings.transferModal !== false;
 	$('settingsModal').classList.remove('hidden');
 }
 
@@ -627,13 +656,15 @@ async function saveSetting(patch) {
 // Небольшое окно подтверждения (вместо системного confirm). Возвращает { ok, dont } — dont = «больше не показывать».
 const ICON_Q = '<svg viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.3-2.5 3.8M12 17v.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
 const ICON_WALLET = '<svg viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3M4 7.5V17a2 2 0 0 0 2 2h14V8H6.5A2.5 2.5 0 0 1 4 7.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="16" cy="13.5" r="1.3" fill="currentColor"/></svg>';
-function miniConfirm({ icon = ICON_Q, warn = false, title, text, extra = '', ok = 'OK', dontShow = false }) {
+function miniConfirm({ icon = ICON_Q, warn = false, title, text, extra = '', ok = 'OK', dontShow = false, cancel = true, dontText = null }) {
 	return new Promise(resolve => {
-		$('miniIcon').innerHTML = icon; $('miniIcon').classList.toggle('warn', warn);
+		$('miniIcon').innerHTML = icon; $('miniIcon').classList.toggle('warn', warn); $('miniIcon').classList.toggle('ok', icon === ICON_OK);
 		$('miniTitle').textContent = title || '';
 		$('miniText').textContent = text || '';
 		$('miniExtra').innerHTML = extra;
 		$('miniDontWrap').classList.toggle('hidden', !dontShow); $('miniDont').checked = false;
+		$('miniDontWrap').querySelector('span').textContent = dontText || t('dont_show_again');
+		$('miniCancel').classList.toggle('hidden', !cancel);
 		$('miniOk').textContent = ok;
 		$('miniModal').classList.remove('hidden');
 		$('miniOk').focus();
@@ -824,7 +855,11 @@ $('loginBtn').addEventListener('click', () => $('loginBtn').dataset.cancel ? api
 $('loginBack').addEventListener('click', () => { ui.addingAccount = false; renderAccounts(ui.status || { accounts: [], pending: null }); });
 $('savedList').addEventListener('click', e => {
 	const l = e.target.dataset.login, f = e.target.dataset.forget;
-	if (l) login({ mode: 'saved', login: l });
+	if (l) {
+		const acc = (ui.saved || []).find(a => a.login === l);
+		if (acc && !acc.hasToken) { setMode('creds'); $('crLogin').value = l; $('crPassword').focus(); showLoginError(t('relogin_needed')); }
+		else login({ mode: 'saved', login: l });
+	}
 	if (f) miniConfirm({ warn: true, text: t('forget_confirm', { login: f }) }).then(r => { if (r.ok) api('/api/accounts/forget', { login: f }).then(renderSaved); });
 });
 $('maFileInput').addEventListener('change', e => e.target.files[0] && readMaFile(e.target.files[0]));
@@ -842,13 +877,15 @@ $('accountBar').addEventListener('click', e => {
 	const add = e.target.closest('#addAcct');
 	const x = e.target.closest('[data-logout]');
 	const chip = e.target.closest('[data-acct]');
-	if (add) { ui.addingAccount = true; ui.maFile = null; setMode('qr'); renderLoginFlow(ui.status && ui.status.pending, true); return; }
+	if (add) { ui.addingAccount = true; ui.maFile = null; setMode('creds'); renderLoginFlow(ui.status && ui.status.pending, true); return; }
 	if (x) { const login = x.dataset.logout; api('/api/logout', { account: login }).then(() => { if (ui.active === login) ui.active = null; poll(true); }); return; }
 	if (chip && chip.dataset.acct !== ui.active) { ui.active = chip.dataset.acct; ui._freshActive = true; renderAccounts(ui.status); }
 });
 
 $('sideNav').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) switchTab(b.dataset.tab); });
 $('guardTopBtn').addEventListener('click', () => switchTab('guard'));
+$('navToggle').addEventListener('click', () => { const c = !$('sideNav').classList.contains('collapsed'); $('sideNav').classList.toggle('collapsed', c); saveSetting({ navCollapsed: c }); });
+$('headerSupport').addEventListener('click', () => openSupport());
 $('casketList').addEventListener('click', e => { const el = e.target.closest('[data-casket]'); if (el) selectCasket(el.dataset.casket); });
 $('showFull').addEventListener('change', e => { ui.showFull = e.target.checked; renderCaskets(); });
 $('modeSwitch').addEventListener('click', async e => {
@@ -925,6 +962,8 @@ $('settingsBtn').addEventListener('click', openSettings);
 $('settingsClose').addEventListener('click', () => $('settingsModal').classList.add('hidden'));
 $('stickerConfirmToggle').addEventListener('change', e => saveSetting({ stickerConfirm: e.target.checked }));
 $('nudgeToggle').addEventListener('change', e => saveSetting({ supportHideNudges: !e.target.checked }));
+$('turboToggle').addEventListener('change', e => saveSetting({ turbo: e.target.checked }));
+$('transferModalToggle').addEventListener('change', e => saveSetting({ transferModal: e.target.checked }));
 document.addEventListener('keydown', e => {
 	if (e.key !== 'Escape') return;
 	if (ui.tourStep != null) return endTour();
@@ -944,6 +983,7 @@ async function loadOverview() {
 		if ((ui.ovScope || 'one') === 'all') ui.overviewAll = await api('/api/overview/all');
 		else ui.overview = await apiGet('/api/overview');
 		renderOverview();
+		loadStorageTop();
 	} catch (e) { toast(e.message, 'bad'); }
 }
 
@@ -1010,6 +1050,19 @@ function renderOverview() {
 				: `<tr><td>${esc(o.login)}</td><td colspan="4" class="muted">${esc(o.error || t('offline'))}</td></tr>`).join('')}
 			</tbody></table>`;
 	}
+}
+
+// Топ предметов в ящиках — грузится отдельно (GC читает содержимое всех ящиков, это несколько секунд).
+async function loadStorageTop() {
+	const all = (ui.ovScope || 'one') === 'all';
+	$('ovStorageTop').innerHTML = `<div class="muted small"><span class="spinner tiny"></span> ${esc(t('ov_storage_loading'))}</div>`;
+	$('ovStorageTotal').textContent = '';
+	try {
+		const r = all ? await api('/api/overview/storage?all=1') : await apiGet('/api/overview/storage');
+		$('ovStorageTotal').textContent = fmt(r.total);
+		$('ovStorageTop').innerHTML = r.top.map(i => `<div class="ov-top-row"><div class="thumb">${i.image ? `<img src="${esc(i.image)}" alt="">` : ''}</div><span class="grow">${esc(i.name)}</span><b>×${fmt(i.count)}</b></div>`).join('')
+			|| `<p class="muted small">${esc(t('no_caskets_title'))}</p>`;
+	} catch (e) { $('ovStorageTop').innerHTML = `<p class="muted small">${esc(e.message)}</p>`; }
 }
 
 $('ovScope').addEventListener('click', e => { const b = e.target.closest('[data-scope]'); if (b) { ui.ovScope = b.dataset.scope; renderOverview(); loadOverview(); } });
@@ -1099,6 +1152,18 @@ function tuUpdateAction() {
 
 }
 
+// Красивое окно с полученным предметом (цвет — по редкости).
+function showCraftResult(r) {
+	const color = RARITY_COLORS[r.rarity] || '#8847ff';
+	$('craftCard').style.setProperty('--rc', color);
+	$('craftImg').innerHTML = r.image ? `<img src="${esc(r.image.replace(/\/\d+fx\d+f$/, '/360fx360f'))}" alt="">` : '';
+	$('craftName').textContent = r.name || t('tradeup_done_unknown');
+	$('craftGrade').textContent = r.rarity ? ((r.stattrak ? 'StatTrak™ ' : '') + (RARITY_NAMES[r.rarity] || '')) : '';
+	$('craftGrade').classList.toggle('hidden', !r.rarity);
+	$('craftModal').classList.remove('hidden');
+	$('craftOk').focus();
+}
+
 async function runTradeUp() {
 	const g = currentTuGroup(); if (!g) return;
 	const ids = [];
@@ -1111,7 +1176,7 @@ async function runTradeUp() {
 	$('tuDo').disabled = true;
 	try {
 		const r = await apiPost('/api/tradeup/craft', { itemIds: ids });
-		toast(r.name ? t('tradeup_done', { name: r.name }) : t('tradeup_done_unknown'), 'good');
+		showCraftResult(r);
 		await loadTradeup();
 		if (ui.state) loadState().catch(() => {});
 	} catch (e) { toast(e.message, 'bad'); tuUpdateAction(); }
@@ -1133,6 +1198,8 @@ $('tuSearch').addEventListener('input', renderTuItems);
 $('tuClear').addEventListener('click', () => { ui.tu.picks = {}; renderTuItems(); });
 $('tuDo').addEventListener('click', runTradeUp);
 $('tuCaskets').addEventListener('change', loadTradeup);
+$('tuRefresh').addEventListener('click', loadTradeup);
+$('craftOk').addEventListener('click', () => $('craftModal').classList.add('hidden'));
 
 
 // ============================================================ трейды
@@ -1396,16 +1463,19 @@ $('mBulk').addEventListener('click', () => {
 
 // ============================================================ Steam Guard (мини-SDA)
 async function loadGuard() {
-	if (!ui.guard) $('guardList').innerHTML = Array.from({ length: 4 }, () => '<div class="skeleton" style="height:64px"></div>').join('');
+	// Возврат во вкладку: сразу показываем то, что уже есть, обновляем в фоне.
+	if (ui.guard) renderGuard();
+	else $('guardList').innerHTML = Array.from({ length: 4 }, () => '<div class="skeleton" style="height:64px"></div>').join('');
+	clearInterval(ui.guardTimer);
+	ui.guardTimer = setInterval(guardTick, 1000);
 	try {
 		const [accounts, codes] = await Promise.all([api('/api/guard/accounts'), api('/api/guard/codes')]);
 		ui.guard = { accounts, codes, at: Date.now(), conf: (ui.guard && ui.guard.conf) || {} };
 		if (!ui.guardSel || !accounts.some(a => a.login === ui.guardSel)) ui.guardSel = (accounts.find(a => a.login === ui.active) || accounts[0] || {}).login || null;
 		renderGuard();
-		if (ui.guardSel) loadGuardConf(ui.guardSel);
-	} catch (e) { $('guardList').innerHTML = `<div class="empty-box">${esc(e.message)}</div>`; }
-	clearInterval(ui.guardTimer);
-	ui.guardTimer = setInterval(guardTick, 1000);
+		const c = ui.guardSel && ui.guard.conf[ui.guardSel];
+		if (ui.guardSel && (!c || !c.at || Date.now() - c.at > 30000)) loadGuardConf(ui.guardSel);
+	} catch (e) { if (!ui.guard) $('guardList').innerHTML = `<div class="empty-box">${esc(e.message)}</div>`; }
 }
 
 // Обратный отсчёт кода; на смене 30-секундного окна берём новые коды.
@@ -1415,11 +1485,26 @@ async function guardTick() {
 	if (left >= ui.guard.codes.period - 0.5 || left <= 0) {
 		try { ui.guard.codes = await api('/api/guard/codes'); ui.guard.at = Date.now(); } catch (e) { /* следующая секунда */ }
 	}
-	document.querySelectorAll('[data-gring]').forEach(el => { el.style.width = `${guardLeft() / ui.guard.codes.period * 100}%`; });
+	syncGuardRings();
 	document.querySelectorAll('[data-gcode]').forEach(el => { el.textContent = ui.guard.codes.codes[el.dataset.gcode] || '—'; });
 	document.querySelectorAll('[data-gleft]').forEach(el => { el.textContent = `${Math.ceil(guardLeft())} s`; });
 }
 const guardLeft = () => Math.max(0, ui.guard.codes.left - (Date.now() - ui.guard.at) / 1000);
+
+// Полоска таймера: плавно в пределах периода; на скачках (новый код, возврат в окно, перерисовка) — без анимации.
+function syncGuardRings() {
+	if (!ui.guard) return;
+	const pct = guardLeft() / ui.guard.codes.period * 100;
+	document.querySelectorAll('[data-gring]').forEach(el => {
+		const cur = parseFloat(el.style.width) || 0;
+		if (Math.abs(cur - pct) > 6 || !el.dataset.ready) { el.style.transition = 'none'; el.style.width = `${pct}%`; void el.offsetWidth; el.style.transition = ''; el.dataset.ready = '1'; }
+		else el.style.width = `${pct}%`;
+	});
+}
+
+// Окно снова активно — сразу догоняем таймер и коды (пока окно было свёрнуто, таймеры замедлялись).
+document.addEventListener('visibilitychange', () => { if (!document.hidden && ui.tab === 'guard' && ui.guard) guardTick(); });
+window.addEventListener('focus', () => { if (ui.tab === 'guard' && ui.guard) guardTick(); });
 
 function renderGuard() {
 	const g = ui.guard; if (!g) return;
@@ -1432,11 +1517,12 @@ function renderGuard() {
 			${avatarHtml(a)}
 			<div style="min-width:0"><div class="strong" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.personaName || a.login)}</div>
 				<div class="sub">${a.online ? `<span class="g-proxy-ok">● ${esc(t('online'))}</span>` : `<span>${esc(a.login)}</span>`}${px}${a.wallet ? `<span class="good-text">${money(a.wallet.balance)} ${esc(a.wallet.currency)}</span>` : ''}</div></div>
-			${code ? `<div style="text-align:right"><div class="g-code" data-gcode="${esc(a.login)}" data-gcopy="${esc(a.login)}" title="${esc(t('copy'))}">${esc(code)}</div><div class="g-ring"><i data-gring style="width:${guardLeft() / g.codes.period * 100}%"></i></div></div>`
+			${code ? `<div style="text-align:right"><div class="g-code" data-gcode="${esc(a.login)}" data-gcopy="${esc(a.login)}" title="${esc(t('copy'))}">${esc(code)}</div><div class="g-ring"><i data-gring></i></div></div>`
 				: `<button class="btn ghost small" data-gadd="${esc(a.login)}">${esc(t('guard_add_mafile'))}</button>`}
 		</div>`;
 	}).join('') || `<div class="empty-box">${esc(t('guard_no_accounts'))}</div>`;
 	renderGuardDetail();
+	syncGuardRings();
 }
 
 function renderGuardDetail() {
@@ -1452,33 +1538,46 @@ function renderGuardDetail() {
 			<button class="btn primary" data-gadd="${esc(a.login)}">${esc(t('guard_add_mafile'))}</button></div>`;
 		return;
 	}
+	$('guardDetail').innerHTML = head + `
+		<div class="card" style="padding:16px;display:flex;align-items:center;gap:16px">
+			<div><div class="muted small">Steam Guard</div><div class="g-big-code" data-gcode="${esc(a.login)}">${esc(code)}</div></div>
+			<div style="flex:1"><div class="g-ring"><i data-gring></i></div><div class="muted small" data-gleft style="margin-top:4px"></div></div>
+			<button class="btn primary" data-gcopy="${esc(a.login)}">${esc(t('copy'))}</button>
+		</div>
+		<div id="gConfBox"></div>`;
+	syncGuardRings();
+	renderGuardConf();
+}
+
+// Подтверждения — отдельный блок: обновляется сам, не трогая код и таймер.
+function renderGuardConf() {
+	const box = document.getElementById('gConfBox'); if (!box) return;
+	const g = ui.guard; const a = g && g.accounts.find(x => x.login === ui.guardSel); if (!a) return;
+	const conf = g.conf[a.login];
 	let confHtml;
 	if (!a.canConfirm) confHtml = `<div class="muted small">${esc(t('guard_no_identity'))}</div>`;
-	else if (!conf) confHtml = '<div class="skeleton" style="height:120px"></div>';
+	else if (!conf || (conf.loading && !conf.list)) confHtml = '<div class="skeleton" style="height:120px"></div>';
 	else if (conf.error) confHtml = `<div class="empty-box">${esc(conf.error)}</div>`;
 	else if (!conf.list.length) confHtml = `<div class="empty-box">${esc(t('m_no_confirm'))}</div>`;
 	else confHtml = conf.list.map(c => `<div class="g-conf">${c.icon ? `<img src="${esc(c.icon)}" alt="">` : '<span></span>'}
 		<div style="min-width:0"><div class="strong">${esc(c.title)}</div><div class="muted small">${esc(c.typeName || '')} · ${esc(c.summary.join(' · '))} · ${esc(tsDate(c.time))}</div></div>
 		<div class="acts"><button class="btn ghost small" data-gdeny="${esc(c.id)}">${esc(t('decline'))}</button><button class="btn good small" data-gallow="${esc(c.id)}">${esc(t('confirm'))}</button></div></div>`).join('');
-	$('guardDetail').innerHTML = head + `
-		<div class="card" style="padding:16px;display:flex;align-items:center;gap:16px">
-			<div><div class="muted small">Steam Guard</div><div class="g-big-code" data-gcode="${esc(a.login)}">${esc(code)}</div></div>
-			<div style="flex:1"><div class="g-ring"><i data-gring style="width:${guardLeft() / g.codes.period * 100}%"></i></div><div class="muted small" data-gleft style="margin-top:4px"></div></div>
-			<button class="btn primary" data-gcopy="${esc(a.login)}">${esc(t('copy'))}</button>
-		</div>
-		<div style="display:flex;align-items:center;gap:8px"><div class="section-title" style="flex:1">${esc(t('m_confirm'))}${conf && conf.list ? ` · ${conf.list.length}` : ''}</div>
+	box.innerHTML = `
+		<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><div class="section-title" style="flex:1">${esc(t('m_confirm'))}${conf && conf.list ? ` · ${conf.list.length}` : ''}${conf && conf.loading ? ' <span class="spinner tiny"></span>' : ''}</div>
 			${conf && conf.list && conf.list.length > 1 ? `<button class="btn good small" data-gallowall="1">${esc(t('m_confirm_all', { n: conf.list.length }))}</button>` : ''}
 			${a.canConfirm ? `<button class="btn ghost small" data-gconfreload="1">${esc(t('refresh'))}</button>` : ''}</div>
-		${confHtml}`;
+		<div style="display:flex;flex-direction:column;gap:8px">${confHtml}</div>`;
 }
 
 async function loadGuardConf(login) {
 	const a = ui.guard.accounts.find(x => x.login === login);
 	if (!a || !a.canConfirm || !ui.guard.codes.codes[login]) return;
-	delete ui.guard.conf[login]; renderGuardDetail();
-	try { ui.guard.conf[login] = { list: await api('/api/guard/confirmations?login=' + encodeURIComponent(login)) }; }
-	catch (e) { ui.guard.conf[login] = { error: e.message }; }
-	if (ui.guardSel === login) renderGuardDetail();
+	const prev = ui.guard.conf[login];
+	ui.guard.conf[login] = { ...(prev || {}), loading: true };  // старый список остаётся на экране, пока грузится новый
+	if (ui.guardSel === login) renderGuardConf();
+	try { ui.guard.conf[login] = { list: await api('/api/guard/confirmations?login=' + encodeURIComponent(login)), at: Date.now() }; }
+	catch (e) { ui.guard.conf[login] = { error: e.message, at: Date.now() }; }
+	if (ui.guardSel === login) renderGuardConf();
 }
 
 async function guardRespond(ids, accept) {
@@ -1545,16 +1644,20 @@ function maybeWelcome() {
 }
 
 // Гайд: подсвечиваем элементы по очереди. Запускается один раз после первого входа (или из настроек).
+// Шаги переключают вкладки и показывают, как делать сложные вещи (а не очевидные элементы).
+// el — список селекторов: берётся первый видимый (например, если ящиков нет — подсвечиваем пустой экран).
 const TOUR = [
-	{ el: '#accountBar', key: 'tour_accounts' },
-	{ el: '#walletBlock', key: 'tour_wallet' },
-	{ el: '#sideNav [data-tab="caskets"]', key: 'tour_caskets', tab: 'caskets' },
-	{ el: '#sideNav [data-tab="overview"]', key: 'tour_overview' },
-	{ el: '#sideNav [data-tab="tradeup"]', key: 'tour_tradeup' },
-	{ el: '#sideNav [data-tab="store"]', key: 'tour_store' },
-	{ el: '#sideNav [data-tab="trades"]', key: 'tour_steam' },
-	{ el: '#sideNav [data-tab="guard"]', key: 'tour_guard' },
-	{ el: '#settingsBtn', key: 'tour_settings' },
+	{ tab: 'caskets', el: ['#casketList .casket', '#casketList', '#emptyState'], key: 'tour_c1' },
+	{ tab: 'caskets', el: ['#modeSwitch'], key: 'tour_c2', before: () => { if (!ui.casketId && ui.state && ui.state.caskets[0]) selectCasket(ui.state.caskets[0].id); } },
+	{ tab: 'caskets', el: ['#itemList .stepper', '#itemList'], key: 'tour_c3' },
+	{ tab: 'caskets', el: ['#actionBtn'], key: 'tour_c4' },
+	{ tab: 'caskets', el: ['#rulesBtn'], key: 'tour_c5' },
+	{ tab: 'store', el: ['#storeGrid .store-card .qty', '#storeGrid'], key: 'tour_s1' },
+	{ tab: 'store', el: ['#cartBtn'], key: 'tour_s2' },
+	{ tab: 'guard', el: ['#guardList .g-acc', '#guardList'], key: 'tour_g1' },
+	{ tab: 'guard', el: ['#guardDetail'], key: 'tour_g2' },
+	{ tab: 'trades', el: ['#giftToggle'], key: 'tour_t1', target: el => el.closest('label') || el },
+	{ tab: null, el: ['#sideNav'], key: 'tour_nav' },
 ];
 
 function startTour() {
@@ -1566,24 +1669,31 @@ function startTour() {
 function endTour() {
 	$('tour').classList.add('hidden');
 	ui.tourStep = null;
+	switchTab('caskets');
 	if (!ui.settings.tourDone) saveSetting({ tourDone: true });
 }
 
-function showTourStep() {
+async function showTourStep() {
 	const st = TOUR[ui.tourStep];
 	if (!st) return endTour();
-	const el = document.querySelector(st.el);
-	if (!el || !el.getBoundingClientRect().width) { ui.tourStep++; return showTourStep(); }
+	if (st.tab && ui.tab !== st.tab) { switchTab(st.tab); await sleep(450); }
+	if (st.before) { try { await st.before(); } catch (e) { /* шаг без подготовки */ } await sleep(350); }
+	if (ui.tourStep == null) return;
+	let el = null;
+	for (const sel of st.el) { const x = document.querySelector(sel); if (x && x.getBoundingClientRect().width) { el = x; break; } }
+	if (el && st.target) el = st.target(el);
+	if (!el) { ui.tourStep++; return showTourStep(); }
 	const r = el.getBoundingClientRect(), pad = 6;
-	Object.assign($('tourSpot').style, { left: `${r.left - pad}px`, top: `${r.top - pad}px`, width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px` });
+	Object.assign($('tourSpot').style, { left: `${r.left - pad}px`, top: `${r.top - pad}px`, width: `${r.width + pad * 2}px`, height: `${Math.min(r.height, innerHeight - r.top - 10) + pad * 2}px` });
 	$('tourStep').textContent = `${ui.tourStep + 1} / ${TOUR.length}`;
 	$('tourTitle').textContent = t(st.key + '_t');
 	$('tourText').textContent = t(st.key);
 	$('tourNext').textContent = ui.tourStep === TOUR.length - 1 ? t('tour_done') : t('next');
-	const card = $('tourCard'), cw = 340, ch = card.offsetHeight || 170, W = innerWidth, H = innerHeight;
-	let left = r.right + 16, top = r.top;
+	const card = $('tourCard'), cw = 340, ch = card.offsetHeight || 180, W = innerWidth, H = innerHeight;
+	let left = r.right + 16, top = Math.max(12, r.top);
 	if (left + cw > W - 12) { left = Math.max(12, Math.min(W - cw - 12, r.left)); top = r.bottom + 16; }
 	if (top + ch > H - 12) top = Math.max(12, r.top - ch - 16);
+	if (top < 12 || r.height > H * 0.6) { top = Math.max(12, Math.min(H - ch - 12, r.top + 20)); left = Math.max(12, Math.min(W - cw - 12, r.right - cw - 20)); }
 	Object.assign(card.style, { left: `${left}px`, top: `${top}px` });
 }
 
@@ -1594,7 +1704,7 @@ function maybeTour() {
 $('welcomeStart').addEventListener('click', () => { $('welcomeModal').classList.add('hidden'); saveSetting({ welcomed: true }).then(maybeTour); });
 $('welcomeGithub').addEventListener('click', () => openExt(GITHUB_URL));
 $('welcomeSupport').addEventListener('click', () => openSupport());
-$('tourNext').addEventListener('click', () => { ui.tourStep++; showTourStep(); });
+$('tourNext').addEventListener('click', () => { if (ui.tourStep == null) return; ui.tourStep++; showTourStep(); });
 $('tourSkip').addEventListener('click', endTour);
 $('settingsTour').addEventListener('click', () => { $('settingsModal').classList.add('hidden'); startTour(); });
 $('settingsAbout').addEventListener('click', () => { $('settingsModal').classList.add('hidden'); if (window.desktop) window.desktop.version().then(v => { $('welcomeVersion').textContent = v; }); $('welcomeModal').classList.remove('hidden'); });
@@ -1679,7 +1789,8 @@ function renderStickers() {
 				<div class="acts"><button data-scrape="${esc(w.id)}" data-slot="${i}">${esc(t('st_scrape'))}</button><button class="rm" data-remove="${esc(w.id)}" data-slot="${i}">${esc(t('delete'))}</button></div></div>`;
 			return sel ? `<div class="st-slot target" data-put="${esc(w.id)}" data-slot="${i}">+ ${esc(t('st_put'))}</div>` : `<div class="st-slot"><span class="muted">${i + 1}</span></div>`;
 		}).join('');
-		return `<div class="st-w">${w.image ? `<img src="${esc(w.image)}" alt="" loading="lazy">` : '<span class="ph"></span>'}<div><div class="strong">${esc(w.name)}</div><div class="st-slots">${slots}</div></div></div>`;
+		const insp = w.inspect ? `<span class="st-insp"><button class="btn ghost small" data-insp-game="${esc(w.inspect)}">${esc(t('inspect_game'))}</button><button class="btn ghost small" data-insp-web="${esc(w.inspect)}">CSFloat</button></span>` : '';
+		return `<div class="st-w">${w.image ? `<img src="${esc(w.image)}" alt="" loading="lazy">` : '<span class="ph"></span>'}<div><div class="st-wh"><span class="strong">${esc(w.name)}</span>${insp}</div><div class="st-slots">${slots}</div></div></div>`;
 	}).join('') : `<div class="empty-box">${esc(t('st_no_weapons'))}</div>`;
 }
 
@@ -1718,6 +1829,8 @@ $('stSearch').addEventListener('input', renderStickers);
 $('stStickers').addEventListener('click', e => { const s = e.target.closest('[data-stk]'); if (s) { const id = Number(s.dataset.stk); ui.stkSel = ui.stkSel === id ? null : id; renderStickers(); } });
 $('stWeapons').addEventListener('click', e => {
 	const d = e.target.dataset;
+	if (d.inspGame) openExt(d.inspGame);
+	if (d.inspWeb) { copyText(d.inspWeb); openExt('https://csfloat.com/checker'); toast(t('inspect_pasted')); }
 	if (d.put) stickerApply(d.put, Number(d.slot));
 	if (d.scrape) stickerAct('/api/stickers/scrape', { weaponId: d.scrape, slot: Number(d.slot) }, t('st_scraped'));
 	if (d.remove) stickerRemove(d.remove, Number(d.slot));
@@ -1871,6 +1984,11 @@ if (window.desktop) {
 		$('toasts').appendChild(el);
 	});
 }
-setMode('qr');
+setMode('creds');
+try {
+	const r = JSON.parse(sessionStorage.getItem('ui_restore') || 'null');
+	sessionStorage.removeItem('ui_restore');
+	if (r) { if (r.active) ui.active = r.active; if (r.tab) ui.restoreTab = r.tab; }
+} catch (e) { /* ignore */ }
 loadSettings();
 poll(true);

@@ -33,7 +33,7 @@ class Manager {
 	// Настройки всего приложения (не аккаунта): быстрая покупка, избранное магазина.
 	// Хранятся на диске, а не в localStorage — порт сервера (и origin страницы) меняется при каждом запуске.
 	settings() {
-		const def = { favorites: [], autoAcceptGifts: false, rules: [], autoApplyRules: false, supportNudgeAt: 0, supportHideNudges: false, stickerConfirm: true, welcomed: false, tourDone: false };
+		const def = { favorites: [], autoAcceptGifts: false, rules: [], autoApplyRules: false, supportNudgeAt: 0, supportHideNudges: false, stickerConfirm: true, welcomed: false, tourDone: false, navCollapsed: false, turbo: false, transferModal: true };
 		try { return { ...def, ...JSON.parse(fs.readFileSync(this.settingsFile, 'utf8')) }; } catch (e) { return def; }
 	}
 
@@ -41,9 +41,10 @@ class Manager {
 		const cur = this.settings();
 		if ('autoAcceptGifts' in patch) cur.autoAcceptGifts = Boolean(patch.autoAcceptGifts);
 		if ('autoApplyRules' in patch) cur.autoApplyRules = Boolean(patch.autoApplyRules);
+		if (typeof patch.lang === 'string' && /^[a-z]{2}$/.test(patch.lang)) cur.lang = patch.lang;
 		if ('supportNudgeAt' in patch) cur.supportNudgeAt = Number(patch.supportNudgeAt) || 0;
 		if ('supportHideNudges' in patch) cur.supportHideNudges = Boolean(patch.supportHideNudges);
-		for (const k of ['stickerConfirm', 'welcomed', 'tourDone']) if (k in patch) cur[k] = Boolean(patch[k]);
+		for (const k of ['stickerConfirm', 'welcomed', 'tourDone', 'navCollapsed', 'turbo', 'transferModal']) if (k in patch) cur[k] = Boolean(patch[k]);
 		if (Array.isArray(patch.rules)) {
 			const kinds = ['any', 'container', 'sticker', 'skin', 'knifeglove', 'graffiti', 'other'];
 			cur.rules = patch.rules.slice(0, 50).map(r => ({
@@ -190,6 +191,17 @@ function start({ dataDir, secretBox, exportDir }) {
 
 	app.get('/api/state', handle(req => pick(req).snapshot()));
 	app.get('/api/overview', handle(async req => pick(req).overview()));
+	app.get('/api/overview/storage', handle(async req => {
+		if (req.query.all === '1') {
+			const merged = new Map(); let total = 0;
+			for (const s of mgr.sessions.values()) {
+				if (s.status !== 'online') continue;
+				try { const r = await s.storageTop(50); total += r.total; for (const g of r.top) { const m = merged.get(g.name) || { ...g, count: 0 }; m.count += g.count; merged.set(g.name, m); } } catch (e) { /* пропуск */ }
+			}
+			return { total, top: [...merged.values()].sort((a, b) => b.count - a.count).slice(0, 15) };
+		}
+		return pick(req).storageTop();
+	}));
 	// Сводка по всем подключённым аккаунтам.
 	app.get('/api/overview/all', handle(async () => {
 		const out = [];
@@ -215,11 +227,13 @@ function start({ dataDir, secretBox, exportDir }) {
 	};
 
 	app.post('/api/store', handle(async req => {
+		pick(req).turbo = Boolean(mgr.settings().turbo);
 		const s = pick(req);
 		const ids = pickIds((await s.snapshot()).inventory, req.body.items, 'movable');
 		return s.storeItems(req.body.casketId, ids, req.body.casketName);
 	}));
 	app.post('/api/take', handle(async req => {
+		pick(req).turbo = Boolean(mgr.settings().turbo);
 		const s = pick(req);
 		const ids = pickIds(await s.casketContents(req.body.casketId), req.body.items, 'ids');
 		return s.takeItems(req.body.casketId, ids, req.body.casketName);
@@ -264,6 +278,7 @@ function start({ dataDir, secretBox, exportDir }) {
 	app.get('/api/rules/plan', handle(req => pick(req).planRules(mgr.settings().rules)));
 	app.post('/api/rules/apply', handle(async req => {
 		const s = pick(req);
+		s.turbo = Boolean(mgr.settings().turbo);
 		const plan = await s.applyRules(mgr.settings().rules);
 		mgr.history({ login: s.login, action: 'rules', items: plan.total, caskets: plan.steps.length });
 		return plan;

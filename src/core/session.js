@@ -141,7 +141,8 @@ class AccountStore {
 
 	list() {
 		const data = this._read();
-		return Object.keys(data).map(login => ({ login, hasMaFile: Boolean(data[login].hasMaFile), proxy: data[login].proxy || '', lastLogin: data[login].lastLogin, personaName: data[login].personaName || null, avatar: data[login].avatar || null }))
+		return Object.keys(data).map(login => ({ login, hasMaFile: Boolean(data[login].hasMaFile), proxy: data[login].proxy || '', lastLogin: data[login].lastLogin,
+			hasToken: Boolean((this._open(data[login].secret) || {}).refreshToken), personaName: data[login].personaName || null, avatar: data[login].avatar || null }))
 			.sort((a, b) => (b.lastLogin || 0) - (a.lastLogin || 0));
 	}
 
@@ -299,7 +300,10 @@ class CasketSession extends EventEmitter {
 			if (remembered) {
 				this.accounts.save(login, {
 					lastLogin: Date.now(), proxy: this.proxy || '', hasMaFile: Boolean(secrets.shared_secret),
-					secret: secrets.shared_secret ? { shared_secret: secrets.shared_secret, identity_secret: secrets.identity_secret, device_id: secrets.device_id } : {},
+					// токен входа сохраняем сразу: после QR-входа steam-user его не присылает событием,
+					// и без этого «быстрый вход» в сохранённый аккаунт не работал (окно только мигало)
+					secret: { ...(token ? { refreshToken: token } : {}),
+						...(secrets.shared_secret ? { shared_secret: secrets.shared_secret, identity_secret: secrets.identity_secret, device_id: secrets.device_id } : {}) },
 				});
 			}
 			user.setPersona(SteamUser.EPersonaState.Offline);
@@ -609,6 +613,21 @@ class CasketSession extends EventEmitter {
 			.sort((a, b) => a.rarity - b.rarity || a.stattrak - b.stattrak);
 	}
 
+	// Топ предметов внутри ящиков (читаем содержимое всех ящиков; кэш 10 минут).
+	async storageTop(limit = 15) {
+		this.ensureOnline();
+		if (this._storageTop && Date.now() - this._storageTop.ts < 10 * 60000) return this._storageTop.data;
+		const all = [];
+		for (const c of this.csgo.inventory.filter(i => i.def_index === CASKET && i.casket_contained_item_count > 0)) {
+			try {
+				all.push(...await new Promise((resolve, reject) => this.csgo.getCasketContents(c.id, (err, items) => err ? reject(err) : resolve(items))));
+			} catch (e) { /* ящик не прочитался — пропускаем */ }
+		}
+		const data = { total: all.length, top: group(all).slice(0, limit).map(g => ({ name: g.name, image: g.image, count: g.count })) };
+		this._storageTop = { ts: Date.now(), data };
+		return data;
+	}
+
 	// Вынуть предметы для контракта из ящиков (если выбраны из «Load Storage Units»).
 	async _takeForTradeUp(itemIds) {
 		const stored = this._storedTradeUp || new Map();
@@ -666,8 +685,10 @@ class CasketSession extends EventEmitter {
 	// отправки чуть разнесены по времени (PACE_MS), чтобы не упереться в лимит Steam на серию операций.
 	_runPipeline(info, ids, send, isDone, fullNotif) {
 		if (this.job && !this.job.finished) throw new Error('уже идёт операция');
-		const WINDOW = 5;
-		const PACE_MS = 55;
+		// «Турбо» (настройка, экспериментально): больше запросов в полёте и меньше пауза — быстрее,
+		// но GC может чаще терять ответы; застрявшие всё равно переотправляются.
+		const WINDOW = this.turbo ? 12 : 5;
+		const PACE_MS = this.turbo ? 15 : 55;
 		const ITEM_TIMEOUT = 8000;
 		const MAX_ATTEMPTS = 3;
 		const N = GlobalOffensive.ItemCustomizationNotification;

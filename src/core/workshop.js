@@ -1,7 +1,8 @@
 // Наклейки на оружии: наклеить, соскоблить, удалить — через Game Coordinator (ApplySticker, 1086).
 //   наклеить:   { sticker_item_id, item_item_id, sticker_slot }
-//   соскоблить: { item_item_id, sticker_slot }                      — износ наклейки растёт на шаг
-//   удалить:    { item_item_id, sticker_slot, sticker_wear_target: 1 } — сразу до конца (наклейка исчезает)
+//   соскоблить: { item_item_id, sticker_slot, sticker_wear_target: N/100 } — износ до N% (как ползунок в игре 0..100)
+//   удалить:    { item_item_id, sticker_slot, sticker_wear_target: 1.11 }  — клиент CS2 шлёт 111 = «удалить совсем»
+// (см. panorama popup_capability_can_sticker.js: InventoryAPI.WearItemSticker(itemId, slot, target|111)).
 'use strict';
 
 const Protos = require('globaloffensive/protobufs/generated/_load.js');
@@ -21,27 +22,35 @@ const isWeapon = it => !it.casket_id && it.def_index > 0 && it.def_index < 100
 // Реальные id предметов из инвентаря Steam (контексты 2 и 16 — обычные и защищённые после обмена).
 // GC иногда держит предметы, которых у игрока нет (превью, X-Ray и т.п.) — сверяемся с сайтом.
 async function webAssetIds(session) {
-	if (session._webAssets && Date.now() - session._webAssets.ts < 60000) return session._webAssets.set;
+	if (session._webAssets && Date.now() - session._webAssets.ts < 60000) return session._webAssets;
 	if (!session.webCookies) return null;
 	const set = new Set();
+	const inspect = new Map();  // assetid -> ссылка «осмотреть» (steam://…csgo_econ_action_preview…)
+	const sid = session.user.steamID.getSteamID64();
 	try {
 		for (const ctx of [2, 16]) {
-			const res = await session.webRequest('GET', `https://steamcommunity.com/inventory/${session.user.steamID.getSteamID64()}/730/${ctx}?l=english&count=2000`);
+			const res = await session.webRequest('GET', `https://steamcommunity.com/inventory/${sid}/730/${ctx}?l=english&count=2000`);
 			if (res.status !== 200) { if (ctx === 2) return null; continue; }
-			for (const a of JSON.parse(res.body).assets || []) set.add(String(a.assetid));
+			const d = JSON.parse(res.body);
+			const links = new Map((d.descriptions || []).map(x => [`${x.classid}_${x.instanceid}`, ((x.actions || [])[0] || {}).link]));
+			for (const a of d.assets || []) {
+				set.add(String(a.assetid));
+				const l = links.get(`${a.classid}_${a.instanceid}`);
+				if (l) inspect.set(String(a.assetid), l.replace('%owner_steamid%', sid).replace('%assetid%', a.assetid));
+			}
 		}
 	} catch (e) { return null; }
-	session._webAssets = { ts: Date.now(), set };
-	return set;
+	session._webAssets = { ts: Date.now(), set, inspect };
+	return session._webAssets;
 }
 
 async function state(session) {
 	session.ensureOnline();
 	const { itemName, itemImage } = require('./session');
 	const inv = session.csgo.inventory;
-	const real = await webAssetIds(session);
-	const weapons = inv.filter(isWeapon).filter(w => !real || real.has(String(w.id))).map(w => ({
-		id: String(w.id), name: itemName(w), image: itemImage(w),
+	const web = await webAssetIds(session);
+	const weapons = inv.filter(isWeapon).filter(w => !web || web.set.has(String(w.id))).map(w => ({
+		id: String(w.id), name: itemName(w), image: itemImage(w), inspect: web ? web.inspect.get(String(w.id)) || null : null,
 		stickers: (w.stickers || []).map(s => ({ slot: s.slot, id: s.sticker_id, name: stickerName(s.sticker_id), image: stickerImage(s.sticker_id), wear: s.wear || 0 })),
 	})).sort((a, b) => b.stickers.length - a.stickers.length || a.name.localeCompare(b.name));
 	const groups = new Map();
@@ -106,11 +115,16 @@ async function scrape(session, weaponId, slot, remove) {
 	const cur = (w.stickers || []).find(s => s.slot === Number(slot));
 	if (!cur) throw new Error('в этом слоте нет наклейки');
 	const before = cur.wear || 0;
-	send(session, { item_item_id: String(w.id), sticker_slot: Number(slot) }, remove ? 1 : null);
-	const ok = await waitChange(session, w.id, x => {
-		const s = (x.stickers || []).find(y => y.slot === Number(slot));
-		return !s || (s.wear || 0) > before;
-	});
+	// Шаг соскабливания — +10% к текущему износу (в игре это ползунок); полностью стёртая — удаляется.
+	const target = remove ? 111 : Math.min(100, Math.ceil(before * 100) + 10);
+	const changed = x => { const st = (x.stickers || []).find(y => y.slot === Number(slot)); return !st || (st.wear || 0) > before; };
+	// Кодировка цели в протоколе не задокументирована: сначала доля (0.35 / 1.11), затем «как в интерфейсе» (35 / 111).
+	let ok = null;
+	for (const [i, value] of [target >= 100 ? 1.11 : target / 100, target].entries()) {
+		send(session, { item_item_id: String(w.id), sticker_slot: Number(slot) }, value);
+		ok = await waitChange(session, w.id, changed, i === 0 ? 7000 : 12000);
+		if (ok) { session.emit('log', `наклейка: ${remove ? 'удаление' : 'соскабливание'} сработало с wear_target=${value}`); break; }
+	}
 	if (!ok) throw new Error('GC не ответил — попробуйте ещё раз');
 	const now = (ok.stickers || []).find(y => y.slot === Number(slot));
 	return { removed: !now, wear: now ? now.wear || 0 : null };

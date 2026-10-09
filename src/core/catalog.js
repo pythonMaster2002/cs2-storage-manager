@@ -139,6 +139,41 @@ function buildStoreMeta(itemsGameText, englishText, imagesMap) {
 	};
 	const tr = tok => tok ? (loc[String(tok).replace(/^#/, '').toLowerCase()] || null) : null;
 	const links = {}, defs = {};
+	// Купоны (наклейки, граффити, музыка) имеют общую иконку-«конверт» econ/coupon/offer — берём иконку
+	// того, что внутри купона: loot list -> [имя]тип -> набор (sticker_kits / music_definitions / keychains).
+	const byName = sec => { const m = {}; for (const v of Object.values(ig[sec] || {})) if (v && v.name) m[v.name] = v; return m; };
+	const kits = byName('sticker_kits'), music = byName('music_definitions'), charms = byName('keychain_definitions');
+	const lootLists = ig.client_loot_lists || {};
+	const img = path => path ? (imagesMap[path] || imagesMap[String(path).toLowerCase()] || null) : null;
+	// Купон капсулы/бокса -> иконка самого контейнера (econ/weapon_cases/crate_…) по ключевым словам названия.
+	const cases = Object.keys(imagesMap).filter(k => k.startsWith('econ/weapon_cases/'));
+	const STOP = new Set(['sticker', 'capsule', 'pack', 'crate', 'coupon', 'box']);
+	const fromCrateName = suffix => {
+		const tokens = suffix.toLowerCase().split('_').filter(t => t && !STOP.has(t));
+		if (!tokens.length) return null;
+		const hits = cases.filter(k => { const parts = k.slice(18).split('_'); return tokens.every(t => parts.includes(t) || k.includes(`_${t}`)); })
+			.filter(k => tokens.includes('stattrak') || !k.includes('stattrak'))
+			.sort((a, b) => a.length - b.length);
+		return hits.length ? imagesMap[hits[0]] : null;
+	};
+	const fromLoot = (listName, depth = 0) => {
+		const list = lootLists[listName];
+		if (!list || depth > 3) return null;
+		for (const key of Object.keys(list)) {
+			const m = key.match(/^\[(.+?)\](\w+)$/);
+			if (!m) { const nested = fromLoot(key, depth + 1); if (nested) return nested; continue; }
+			const [, name, kind] = m;
+			let found = null;
+			if (kind === 'musickit' && music[name]) found = img(music[name].image_inventory);
+			else if (kind === 'keychain' && charms[name]) found = img(charms[name].image_inventory) || img(`econ/keychains/${name}/kc_${name}`);
+			else if (kits[name]) {
+				const mat = kits[name].sticker_material || kits[name].patch_material;
+				found = img(`econ/stickers/${mat}`) || img(`econ/patches/${mat}`) || img(`econ/stickers/${mat}_large`);
+			}
+			if (found) return found;
+		}
+		return null;
+	};
 	for (const [id, def] of Object.entries(items)) {
 		if (!/^\d+$/.test(id) || !def || typeof def !== 'object') continue;
 		if (def.name) links[def.name] = Number(id);
@@ -147,10 +182,18 @@ function buildStoreMeta(itemsGameText, englishText, imagesMap) {
 		// Купон музыкального набора без своей строки локализации: «StatTrak™ Music Kit | <набор>».
 		const kit = !name && String(def.name || '').match(/^coupon - (.+?)(_stattrak)?$/);
 		if (kit && tr(`musickit_${kit[1]}`)) name = `${kit[2] ? 'StatTrak™ ' : ''}Music Kit | ${tr(`musickit_${kit[1]}`)}`;
-		const img = field(def, 'image_inventory');
-		const image = (img && (imagesMap[img] || imagesMap[String(img).toLowerCase()]))
-			|| imagesMap[`econ/tools/${def.name}`] || imagesMap[`econ/keychains/${def.name}/kc_${def.name}`] || null;
-		if (name || image) defs[id] = { name, image };
+		const invImg = field(def, 'image_inventory');
+		const generic = /^econ\/coupon\//.test(invImg || '');
+		let image = (!generic && img(invImg)) || img(`econ/tools/${def.name}`) || img(`econ/keychains/${def.name}/kc_${def.name}`) || null;
+		let envelope = false;
+		if (!image || generic) {
+			const loot = field(def, 'loot_list_name');
+			const coupon = String(def.name || '').match(/^coupon - (.+)$/);
+			const real = (loot ? fromLoot(loot) : null) || (coupon ? fromCrateName(coupon[1]) : null);
+			if (real) image = real;
+			else { envelope = true; image = image || img(invImg); }
+		}
+		if (name || image) defs[id] = envelope ? { name, image, generic: true } : { name, image };
 	}
 	return { built: Date.now(), links, defs, armory: buildArmory(ig, tr, links, defs, imagesMap) };
 }

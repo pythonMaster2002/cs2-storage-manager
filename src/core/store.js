@@ -111,7 +111,7 @@ function describeLink(link) {
 	const tail = IMAGES.images && IMAGES.images[`def:${def}`];
 	let image = m.image || (tail ? `${IMAGES.cdn}${tail}` : null);
 	if (image && /economy\/image\//.test(image) && !/\/\d+fx\d+f$/.test(image)) image += '/128fx128f';
-	return { def: Number(def), name: m.name || NAMES[`def:${def}`] || null, image };
+	return { def: Number(def), name: m.name || NAMES[`def:${def}`] || null, image, generic: Boolean(m.generic) || !image };
 }
 
 // Весь каталог магазина для UI: {link, def, name, image, price (в основных единицах), buyable}.
@@ -125,7 +125,7 @@ async function catalog(session) {
 		const d = describeLink(link);
 		if (!d || !d.name) continue;
 		items.push({
-			link, def: d.def, name: d.name, image: d.image,
+			link, def: d.def, name: d.name, image: d.image, generic: d.generic,
 			price: unit / 100, unit,
 			category: entry.category_tags || '',
 			buyable: true,
@@ -133,7 +133,7 @@ async function catalog(session) {
 	}
 	// Порядок: контейнер, лицензия игры, пропуск Armory — первыми; дальше товары с иконками, без иконок — в конце.
 	const PINNED = [1201, 1353, 1354];
-	const rank = it => (PINNED.includes(it.def) ? PINNED.indexOf(it.def) : it.image ? 10 : 20);
+	const rank = it => (PINNED.includes(it.def) ? PINNED.indexOf(it.def) : it.generic ? 20 : 10);  // «конверты» — в конец
 	items.sort((a, b) => rank(a) - rank(b) || a.price - b.price || a.name.localeCompare(b.name));
 	return { currency: ps.currency, balance: session.user.wallet.balance, items };
 }

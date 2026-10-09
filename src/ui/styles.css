@@ -537,15 +537,11 @@ img.avatar { object-fit: cover; padding: 0; background: var(--panel-2); }
 .nav-item.active { background: var(--accent-soft); color: var(--accent); }
 .nav-foot { padding: 10px; }
 @media (max-width: 1280px) {
-	.side-nav { width: 62px; }
-	.nav-item span:not(.nav-badge), .nav-group, .nav-foot { display: none; }
-	.nav-item { justify-content: center; padding: 0; position: relative; }
-	.nav-item .nav-badge { position: absolute; top: 2px; right: 2px; }
 	.guard-top span:not(.nav-badge) { display: none; }
 	.meter-block { width: 120px; }
 }
-.sel { height: 34px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg-2); color: var(--text); padding: 0 10px; font: inherit; }
-.switch-row .sel { width: auto; min-width: 160px; }
+.sel-input { height: 34px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg-2); color: var(--text); padding: 0 10px; font: inherit; }
+.switch-row .sel-input { width: auto; min-width: 160px; }
 .settings-links { display: flex; gap: 8px; margin-top: 12px; }
 .acct-bal { font-size: 10.5px; color: var(--good); }
 
@@ -669,3 +665,64 @@ img.avatar { object-fit: cover; padding: 0; background: var(--panel-2); }
 .guard-list > *, .trade-items > *, .st-weapons > *, .st-stickers > * { flex: none; }
 .meter-label { white-space: nowrap; gap: 8px; }
 @media (max-width: 1280px) { .meter-block .meter-label > span:first-child { display: none; } .meter-block .meter-label { justify-content: flex-end; } }
+
+/* ---- экран входа: компактно, без прокрутки на обычных экранах */
+#loginView { display: flex; flex-direction: column; }
+.login-topbar { position: fixed; top: 10px; right: 14px; left: 14px; max-width: none !important; margin: 0; padding: 0; z-index: 5; pointer-events: none; }
+.login-topbar > * { pointer-events: auto; }
+.login-wrap { margin: auto; padding: 18px 0; }
+.brand-block { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 14px; text-align: left; }
+.brand-block .logo { width: 44px; height: 44px; margin: 0; border-radius: 12px; }
+.brand-block .logo svg { width: 24px; height: 24px; }
+.brand-block h1 { margin: 0; font-size: 22px; }
+.brand-block p { margin: 0; font-size: 13px; }
+.login-card { padding: 18px 20px; }
+.qr-box { width: 200px; height: 200px; margin-top: 12px; }
+.qr-box img { width: 190px; height: 190px; }
+.saved-list { max-height: 190px; overflow: auto; }
+.login-card label { margin-top: 10px; }
+.login-card .hint { margin-top: 6px; font-size: 11.5px; }
+#loginBtn { margin-top: 14px; }
+.footnote { margin-top: 10px; }
+@media (max-height: 760px) { .brand-block p, .footnote, .login-card .hint { display: none; } .qr-box { width: 170px; height: 170px; } .qr-box img { width: 160px; height: 160px; } }
+
+/* ---- боковое меню: широкое со шторкой; в свёрнутом виде группы разделены линиями */
+.side-nav { width: 210px; position: relative; transition: width .18s ease; }
+.nav-toggle { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); display: grid; place-items: center; cursor: pointer; z-index: 2; }
+.nav-toggle:hover { color: var(--text); border-color: var(--line-2); }
+.nav-toggle svg { width: 15px; height: 15px; transition: transform .18s; }
+.side-nav .nav-group:first-of-type { padding-right: 36px; }
+.side-nav.collapsed { width: 62px; }
+.side-nav.collapsed .nav-toggle { position: static; margin: 0 auto 6px; }
+.side-nav.collapsed .nav-toggle svg { transform: rotate(180deg); }
+.side-nav.collapsed .nav-item span:not(.nav-badge), .side-nav.collapsed .nav-foot { display: none; }
+.side-nav.collapsed .nav-item { justify-content: center; padding: 0; position: relative; }
+.side-nav.collapsed .nav-item .nav-badge { position: absolute; top: 2px; right: 2px; }
+.side-nav.collapsed .nav-group { font-size: 0; padding: 0; margin: 8px 6px; height: 1px; background: var(--line-2); }
+.side-nav.collapsed .nav-group:first-of-type { margin-top: 2px; }
+.top-heart { flex: none; }
+.td-support { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: rgba(255, 107, 138, .06); border: 1px solid rgba(255, 107, 138, .25); font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); }
+.mini-ico.ok { background: var(--good-soft); color: var(--good); }
+
+.beta-note { border-color: rgba(76, 141, 255, .35) !important; background: var(--accent-soft) !important; color: var(--text); }
+/* ---- окно результата контракта */
+.craft-card { width: min(420px, calc(100vw - 40px)); padding: 26px 24px 22px; text-align: center; position: relative; overflow: hidden; --rc: #8847ff; }
+.craft-rays { position: absolute; inset: -40%; background: conic-gradient(from 0deg, transparent 0 10%, color-mix(in srgb, var(--rc) 35%, transparent) 12% 14%, transparent 16% 35%, color-mix(in srgb, var(--rc) 30%, transparent) 37% 39%, transparent 41% 60%, color-mix(in srgb, var(--rc) 35%, transparent) 62% 64%, transparent 66% 85%, color-mix(in srgb, var(--rc) 30%, transparent) 87% 89%, transparent 91%); animation: craftSpin 9s linear infinite; opacity: .55; pointer-events: none; }
+@keyframes craftSpin { to { transform: rotate(360deg); } }
+.craft-card > *:not(.craft-rays) { position: relative; }
+.craft-img { height: 170px; display: grid; place-items: center; margin: 10px 0 6px; }
+.craft-img img { max-width: 260px; max-height: 160px; object-fit: contain; filter: drop-shadow(0 0 22px var(--rc)) drop-shadow(0 8px 14px rgba(0,0,0,.6)); animation: craftPop .7s cubic-bezier(.2, 1.4, .4, 1) both; }
+@keyframes craftPop { from { transform: scale(.2) rotate(-12deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+.craft-name { font-size: 19px; font-weight: 800; animation: craftFade .5s .35s both; }
+.craft-grade { margin: 6px auto 18px; display: inline-block; padding: 2px 12px; border-radius: 99px; font-size: 12px; font-weight: 700; color: #fff; background: var(--rc); animation: craftFade .5s .5s both; }
+@keyframes craftFade { from { opacity: 0; transform: translateY(8px); } }
+.craft-card .btn { min-width: 160px; }
+.ov-single { grid-template-columns: 1fr !important; margin-top: 14px; }
+.ov-top-grid { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 18px; }
+.st-wh { display: flex; align-items: center; gap: 10px; }
+.st-wh .strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-insp { display: flex; gap: 6px; flex: none; }
+.craft-grade { display: table; margin: 6px auto 18px; }
+.craft-card .btn { display: flex; margin: 0 auto; }
+.mini-card .check { display: flex; align-items: center; justify-content: center; gap: 8px; text-align: left; max-width: 320px; margin-left: auto; margin-right: auto; }
+.mini-card .check input { flex: none; }
