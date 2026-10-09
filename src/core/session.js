@@ -16,6 +16,12 @@ const catalog = require('./catalog');
 const CASKET = 1201;
 const CASKET_CAPACITY = 1000;
 const INVENTORY_LIMIT = 1000;
+const QR_TTL = 150000;
+// Адаптивная скорость перекладки (см. _runPipeline). Старт — проверенный «безопасный» темп.
+// Замер 09.10.2026 (200 шт туда-обратно, окно/пауза): 5/100 мс — 8,3 шт/с без потерь; 5/55 — 7,5–8,5 и 5–6 потерь;
+// 3/55 — 7,3 без потерь; 8/55 — 5,4–6,2 и 6–7 потерь; 12/15 («турбо») — 3,3 шт/с и 15 потерь.
+const SPEED = { window: 6, startPace: 100, minPace: 35, maxPace: 250, minTimeout: 3500, maxTimeout: 10000 };
+const LEARNED_SPEED = new Map();  // login -> { window, pace } последней перекладки
 const NAMES = catalog.loadMap('names.json');
 Object.assign(NAMES, { 'def:1201': 'Storage Unit', 'def:1209': 'Sticker', 'def:1348': 'Sealed Graffiti', 'def:1349': 'Graffiti' });
 const IMAGES = catalog.loadMap('images.json');
@@ -191,7 +197,10 @@ class CasketSession extends EventEmitter {
 		this.status = 'connecting';
 		this.error = null;
 		this.needsRelogin = false;
+		this.mode = mode;
 		this.qrUrl = null;
+		this.qrScanned = false;
+		this.remember = remember;  // для QR галочку можно поменять, пока код на экране (/api/login/remember)
 		try {
 			if (mode === 'mafile') {
 				if (!maFile || !maFile.shared_secret) throw new Error('в maFile нет shared_secret');
@@ -216,16 +225,24 @@ class CasketSession extends EventEmitter {
 			if (this.proxy) {
 				this.emit('log', 'проверяем прокси...');
 				await this._verifyProxy();
+				if (this.status === 'offline') throw new Error('вход прерван');
 			}
 
 			// QR: refresh token via the Steam mobile app, then a normal token login.
 			let token = mode === 'saved' ? secrets.refreshToken : null;
 			if (mode === 'qr') {
 				const { LoginSession, EAuthTokenPlatformType } = require('steam-session');
+				// Весь обмен с Steam (создание QR-сессии и опрос статуса) идёт через прокси аккаунта;
+				// сама картинка QR рисуется локально. Пока код не отсканирован, сессия ни к какому аккаунту не привязана.
 				const qr = this._qrSession = new LoginSession(EAuthTokenPlatformType.SteamClient, proxyOption);
+				qr.loginTimeout = QR_TTL;
 				this.qrUrl = (await qr.startWithQR()).qrChallengeUrl;
+				if (this.status === 'offline') { qr.cancelLoginAttempt(); throw new Error('вход по QR отменён'); }  // отменили, пока Steam выдавал код
+				this.qrExpires = Date.now() + QR_TTL;
 				this.status = 'qr';
-				qr.on('remoteInteraction', () => this.emit('log', 'QR отсканирован — подтвердите вход в приложении Steam'));
+				// Steam периодически выдаёт новый код (new_challenge_url) — старый после этого не сработает.
+				qr.on('debug', (what, res) => { if (what === 'poll response' && res && res.newChallengeUrl) this.qrUrl = res.newChallengeUrl; });
+				qr.on('remoteInteraction', () => { this.qrScanned = true; this.emit('log', 'QR отсканирован — подтвердите вход в приложении Steam'); });
 				await new Promise((resolve, reject) => {
 					this._qrReject = () => reject(new Error('вход по QR отменён'));
 					qr.on('authenticated', resolve);
@@ -242,7 +259,7 @@ class CasketSession extends EventEmitter {
 			const user = this.user = new SteamUser({ renewRefreshTokens: true, autoRelogin: false, ...proxyOption });
 			this.csgo = new GlobalOffensive(user);
 			this._trackSO(user);
-			const remembered = remember || mode === 'saved';
+			const remembered = this.remember || mode === 'saved';
 			user.on('refreshToken', t => { if (remembered) this.accounts.save(login, { secret: { refreshToken: t } }); });
 			user.on('webSession', (sid, cookies) => { this.webCookies = cookies; });
 			user.on('disconnected', (eresult, msg) => {
@@ -595,6 +612,9 @@ class CasketSession extends EventEmitter {
 				for (const it of list) { pool.push(it); this._storedTradeUp.set(String(it.id), String(c.id)); }
 			}
 		}
+		this._tuPool = new Map(pool.map(i => [String(i.id), i]));
+		const web = await require('./workshop').webAssetIds(this).catch(() => null);
+		const wear = id => { const it = this._tuPool.get(id); return it && it.paint_wear != null ? it.paint_wear : 1; };
 		const groups = new Map();
 		for (const item of pool) {
 			if (!isTradeUpInput(item)) continue;
@@ -607,10 +627,59 @@ class CasketSession extends EventEmitter {
 		return [...groups.values()]
 			.map(g => ({
 				rarity: g.rarity, stattrak: g.stattrak, total: g.raw.length,
-				// сначала предметы из инвентаря — из ящиков берём, только если их не хватает
-				items: group(g.raw).map(x => ({ ...x, ids: [...x.ids.filter(id => !stored.has(id)), ...x.ids.filter(id => stored.has(id))], stored: x.ids.filter(id => stored.has(id)).length })),
+				// сначала предметы из инвентаря (из ящиков — только если не хватает), внутри — от меньшего float
+				items: group(g.raw).map(x => {
+					const byWear = (a, b) => wear(a) - wear(b);
+					const ids = [...x.ids.filter(id => !stored.has(id)).sort(byWear), ...x.ids.filter(id => stored.has(id)).sort(byWear)];
+					const floats = ids.map(id => { const it = this._tuPool.get(id); return it && it.paint_wear != null ? Number(it.paint_wear.toFixed(6)) : null; });
+					const insp = web && ids.map(id => web.inspect.get(id)).find(Boolean);
+					return { ...x, ids, floats, stored: x.ids.filter(id => stored.has(id)).length, inspect: insp || null };
+				}),
 			}))
 			.sort((a, b) => a.rarity - b.rarity || a.stattrak - b.stattrak);
+	}
+
+	// Прогноз контракта: возможные исходы с шансами и ожидаемым float результата.
+	// Шанс: каждый вход даёт 1/N своей коллекции, внутри коллекции исходы следующей редкости равновероятны.
+	// Float (≈, формула CS2): средний нормализованный float входов (f − min) / (max − min),
+	// перенесённый в диапазон float результата.
+	async tradeUpPreview(itemIds) {
+		this.ensureOnline();
+		const tu = catalog.storeMeta().tradeup;
+		const pool = this._tuPool || new Map();
+		const items = (itemIds || []).map(id => pool.get(String(id)) || this.csgo.inventory.find(i => String(i.id) === String(id))).filter(Boolean);
+		const web = items.length ? await require('./workshop').webAssetIds(this).catch(() => null) : null;
+		const skin = it => (tu && tu.skins[`${it.def_index}:${Math.round(it.paint_index || 0)}`]) || null;
+		const inputs = items.map(it => ({ id: String(it.id), name: itemName(it), float: it.paint_wear != null ? it.paint_wear : null,
+			collection: skin(it) ? tu.sets[skin(it)[0]] : null, inspect: (web && web.inspect.get(String(it.id))) || null, stored: Boolean(it.casket_id) }));
+		const floats = inputs.map(i => i.float).filter(f => f != null);
+		const out = { count: items.length, inputs, outcomes: [], avgFloat: floats.length ? floats.reduce((a, b) => a + b, 0) / floats.length : null, float: null, unknown: [] };
+		if (!items.length || !tu) return out;
+		const rarity = items[0].rarity, st = isStatTrak(items[0]);
+		const tier = new Map();  // коллекция -> скины следующей редкости
+		for (const [k, v] of Object.entries(tu.skins)) if (v[1] === rarity + 1) { if (!tier.has(v[0])) tier.set(v[0], []); tier.get(v[0]).push(k); }
+		let normSum = 0, normN = 0;
+		const chance = new Map();
+		for (const it of items) {
+			const sk = skin(it);
+			const outs = sk && tier.get(sk[0]);
+			if (!outs) { out.unknown.push(itemName(it)); continue; }
+			if (it.paint_wear != null) { normSum += Math.min(1, Math.max(0, (it.paint_wear - sk[2]) / ((sk[3] - sk[2]) || 1))); normN++; }
+			for (const k of outs) chance.set(k, (chance.get(k) || 0) + 1 / (items.length * outs.length));
+		}
+		const norm = normN ? normSum / normN : null;
+		out.float = norm;
+		out.outcomes = [...chance].map(([key, p]) => {
+			const [def, paint] = key.split(':').map(Number);
+			const sk = tu.skins[key];
+			const fl = norm == null ? null : sk[2] + norm * (sk[3] - sk[2]);
+			const fake = { def_index: def, paint_index: paint, rarity: rarity + 1, quality: st ? 9 : 4, ...(st ? { kill_eater_value: 0 } : {}) };
+			const exterior = fl == null ? null : EXTERIORS.find(([max]) => fl < max)[1];
+			const name = itemName(fake);
+			return { key, name, image: itemImage(fake), chance: p, float: fl, min: sk[2], max: sk[3], exterior, collection: tu.sets[sk[0]],
+				marketName: exterior ? `${name} (${exterior})` : name };
+		}).sort((a, b) => b.chance - a.chance || a.name.localeCompare(b.name));
+		return out;
 	}
 
 	// Топ предметов внутри ящиков (читаем содержимое всех ящиков; кэш 10 минут).
@@ -670,7 +739,8 @@ class CasketSession extends EventEmitter {
 				else if (Date.now() > deadline) { clearInterval(timer); resolve(null); }
 			}, 500);
 		});
-		if (fresh) return { name: itemName(fresh), image: itemImage(fresh), rarity: fresh.rarity, stattrak: isStatTrak(fresh) };
+		// itemName (с StatTrak и качеством) совпадает с market_hash_name — по нему ссылка на Торговую площадку
+		if (fresh) return { id: String(fresh.id), name: itemName(fresh), image: itemImage(fresh), rarity: fresh.rarity, stattrak: isStatTrak(fresh), float: fresh.paint_wear != null ? fresh.paint_wear : null };
 		// Новый предмет не распознали — проверим, что входы исчезли (контракт всё же прошёл).
 		const consumed = itemIds.every(id => !this.csgo.inventory.find(i => String(i.id) === String(id)));
 		if (consumed) return { name: null, image: null, consumed: true };
@@ -679,18 +749,34 @@ class CasketSession extends EventEmitter {
 
 	// ---------------------------------------------------------------- operations
 
-	// Перемещение окном запросов (WINDOW штук «в полёте»), но успех определяется НЕ по ответам GC
+	// Перемещение окном запросов (speed.window штук «в полёте»), но успех определяется НЕ по ответам GC
 	// (они на больших пачках теряются/задерживаются — отсюда прежние зависания и ложные ошибки),
-	// а по реальному состоянию инвентаря (isDone). Застрявшие предметы переотправляются (до MAX_ATTEMPTS),
-	// отправки чуть разнесены по времени (PACE_MS), чтобы не упереться в лимит Steam на серию операций.
+	// а по реальному состоянию инвентаря (isDone). Застрявшие предметы переотправляются (до MAX_ATTEMPTS).
+	// Скорость подбирается сама, как в TCP: пока GC успевает — окно растёт, паузы между отправками
+	// сокращаются; предмет не переместился вовремя — резко сбавляем и снова плавно разгоняемся.
+	// Найденный темп запоминается для аккаунта и служит стартом следующей перекладки.
 	_runPipeline(info, ids, send, isDone, fullNotif) {
 		if (this.job && !this.job.finished) throw new Error('уже идёт операция');
-		// «Турбо» (настройка, экспериментально): больше запросов в полёте и меньше пауза — быстрее,
-		// но GC может чаще терять ответы; застрявшие всё равно переотправляются.
-		const WINDOW = this.turbo ? 12 : 5;
-		const PACE_MS = this.turbo ? 15 : 55;
-		const ITEM_TIMEOUT = 8000;
 		const MAX_ATTEMPTS = 3;
+		const learned = LEARNED_SPEED.get(this.login);
+		const speed = { window: SPEED.window, pace: learned ? Math.min(SPEED.maxPace, learned.pace + 10) : SPEED.startPace, ok: 0, lat: null, calmUntil: 0, slowdowns: 0 };
+		// время ожидания предмета — от фактической задержки GC (быстрый GC — быстрее замечаем потерю)
+		const itemTimeout = () => Math.min(SPEED.maxTimeout, Math.max(SPEED.minTimeout, (speed.lat || 1200) * 6));
+		// GC ограничивает частоту запросов: чаще ~10 в секунду — начинает их терять, и ожидание потерь съедает
+		// больше, чем даёт спешка. Поэтому регулируем паузу между отправками (AIMD): без потерь — понемногу
+		// ускоряемся, потеря — заметно замедляемся. Окно (запросов «в полёте») — небольшое и постоянное.
+		const onSuccess = latency => {
+			speed.lat = speed.lat == null ? latency : speed.lat * 0.8 + latency * 0.2;
+			if (++speed.ok < 10) return;
+			speed.ok = 0;
+			speed.pace = Math.max(SPEED.minPace, speed.pace - 4);
+		};
+		const onLoss = () => {
+			if (Date.now() < speed.calmUntil) return;  // пачка потерь из одного окна — один откат
+			speed.calmUntil = Date.now() + itemTimeout();
+			speed.ok = 0; speed.slowdowns++;
+			speed.pace = Math.min(SPEED.maxPace, Math.round(speed.pace * 1.2 + 15));
+		};
 		const N = GlobalOffensive.ItemCustomizationNotification;
 		const job = this.job = { ...info, done: 0, failed: 0, total: ids.length, error: null, finished: false, cancelled: false, started: Date.now() };
 		let stop = null;
@@ -705,23 +791,26 @@ class CasketSession extends EventEmitter {
 				if (job.cancelRequested) job.cancelled = true;
 				job.done = ids.reduce((n, id) => n + (isDone(id) ? 1 : 0), 0);
 				for (const [id, t] of inflight) {
-					if (isDone(id) || Date.now() - t > ITEM_TIMEOUT) inflight.delete(id);
+					if (isDone(id)) { inflight.delete(id); onSuccess(Date.now() - t); }
+					else if (Date.now() - t > itemTimeout()) { inflight.delete(id); onLoss(); }
 				}
+				job.rate = { window: speed.window, pace: speed.pace, slowdowns: speed.slowdowns };
 				if (ids.every(isDone)) break;
 				if ((job.cancelled || stop) && inflight.size === 0) break;
 				const pending = ids.filter(id => !isDone(id) && attempts.get(id) < MAX_ATTEMPTS && !inflight.has(id));
 				if (!pending.length && inflight.size === 0) break; // больше пробовать нечего
 				if (!stop && !job.cancelled) {
-					while (inflight.size < WINDOW && pending.length) {
+					while (inflight.size < speed.window && pending.length) {
 						const id = pending.shift();
 						try { send(id); } catch (e) { /* GC занят — попробуем снова на след. круге */ }
 						inflight.set(id, Date.now());
 						attempts.set(id, attempts.get(id) + 1);
-						await sleep(PACE_MS);
+						await sleep(speed.pace);
 					}
 				}
-				await sleep(100);
+				await sleep(40);
 			}
+			LEARNED_SPEED.set(this.login, { pace: speed.pace });
 			job.done = ids.reduce((n, id) => n + (isDone(id) ? 1 : 0), 0);
 			job.failed = ids.length - job.done;
 			if (stop && job.failed) job.error = stop;
@@ -884,4 +973,4 @@ function humanError(e) {
 	return map[e.message] || e.message;
 }
 
-module.exports = { CasketSession, AccountStore, itemName, itemImage, CASKET_CAPACITY, humanError };
+module.exports = { CasketSession, AccountStore, itemName, itemImage, CASKET_CAPACITY, humanError, _SPEED: SPEED };

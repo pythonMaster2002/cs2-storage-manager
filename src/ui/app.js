@@ -58,7 +58,8 @@ function rerenderAll() {
 
 // ============================================================ состояние
 const ui = {
-	mode: 'creds', maFile: null,
+	mode: 'qr', maFile: null,
+	qr: { state: 'idle', img: null, since: 0 },  // QR на экране входа: idle | loading | shown | expired
 	status: null, active: null, state: null,
 	casketId: null, op: 'store', contents: {}, picks: {},
 	search: '', onlyCases: false, showFull: false, loadingItems: false,
@@ -110,11 +111,52 @@ function activeAccount() {
 
 // ============================================================ вход
 function setMode(mode) {
+	const was = ui.mode;
 	ui.mode = mode;
 	document.querySelectorAll('.login-card .segmented button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
 	document.querySelectorAll('[data-pane]').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== mode));
-	if (!$('loginBtn').dataset.cancel) $('loginBtn').textContent = mode === 'qr' ? t('btn_show_qr') : t('btn_login');
+	$('loginBtn').classList.toggle('hidden', mode === 'qr');
 	$('loginError').classList.add('hidden');
+	if (was === 'qr' && mode !== 'qr') cancelQr();
+	if (mode === 'qr' && was !== 'qr') { ui.qr.state = 'idle'; ensureQr(); }
+}
+
+// ---- QR — основной способ входа: код появляется сразу, сам обновляется от Steam;
+// истёк — новый по кнопке. Если вписали прокси — код перевыпускается уже через прокси.
+const qrPending = p => p && p.mode === 'qr' && !p.login && ['connecting', 'qr'].includes(p.status);
+function ensureQr() {
+	if (ui.mode !== 'qr' || ui.qr.state !== 'idle' || $('loginView').classList.contains('hidden')) return;
+	startQr();
+}
+function startQr() {
+	ui.qr = { state: 'loading', img: null, since: Date.now(), proxy: $('proxy').value.trim() };
+	renderQrBox(null);
+	api('/api/login', { mode: 'qr', proxy: $('proxy').value.trim() || null, remember: $('remember').checked })
+		.then(() => { ui._wasPending = true; poll(true); })
+		.catch(e => { ui.qr.state = 'expired'; ui.qr.error = e.message; renderQrBox(null); });
+}
+function cancelQr() {
+	const p = ui.status && ui.status.pending;
+	if (ui.qr.state === 'loading' || ui.qr.state === 'shown' || qrPending(p)) api('/api/login/qr/cancel', {}).catch(() => {});
+	ui.qr = { state: 'idle', img: null, since: 0 };
+}
+function renderQrBox(pending) {
+	const q = ui.qr;
+	if (q.state === 'shown' && pending && pending.qr && q.img !== pending.qr) { q.img = pending.qr; $('qrImg').src = pending.qr; }
+	$('qrImg').classList.toggle('hidden', q.state !== 'shown' || !q.img);
+	$('qrPlaceholder').classList.toggle('hidden', q.state === 'shown' && Boolean(q.img));
+	$('qrPlaceholder').classList.toggle('loading', q.state === 'loading' || q.state === 'idle');
+	$('qrExpired').classList.toggle('hidden', q.state !== 'expired');
+	const st = $('qrStatus');
+	st.classList.remove('ok');
+	if (q.state === 'expired') {
+		$('qrExpiredText').textContent = q.error && !/QR/.test(q.error) ? t('qr_failed') : t('qr_expired');
+		st.textContent = q.error && !/QR/.test(q.error) ? q.error : '';
+	} else if (q.state === 'shown' && pending && pending.qrScanned) { st.textContent = t('qr_scanned'); st.classList.add('ok'); }
+	else if (q.state === 'shown' && pending && pending.qrLeft != null) {
+		const left = pending.qrLeft;
+		st.textContent = t('qr_left', { time: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` });
+	} else st.textContent = t('qr_loading');
 }
 
 async function renderSaved() {
@@ -134,6 +176,7 @@ async function renderSaved() {
 
 async function login(body) {
 	$('loginError').classList.add('hidden');
+	if (body.mode !== 'qr') ui.qr.state = 'idle';  // сервер заменит висящий QR этим входом
 	if (body.mode !== 'qr') { showView('connectingView'); $('connectingTitle').textContent = body.login ? t('connecting_to', { login: body.login }) : t('connecting'); }
 	try { await api('/api/login', body); ui._wasPending = true; poll(true); }
 	catch (e) { showView('loginView'); showLoginError(e.message); toast(e.message, 'bad'); }
@@ -217,7 +260,7 @@ function renderAccounts(s) {
 function renderLoginFlow(pending, hasAccounts) {
 	$('loginBack').classList.toggle('hidden', !hasAccounts);
 	const st = pending && pending.status;
-	if (st === 'connecting') {
+	if (st === 'connecting' && !qrPending(pending)) {
 		showView('connectingView');
 		$('connectingTitle').textContent = pending.login ? t('connecting_to', { login: pending.login }) : t('connecting');
 		$('guardModal').classList.add('hidden');
@@ -225,25 +268,23 @@ function renderLoginFlow(pending, hasAccounts) {
 		showView('connectingView');
 		$('connectingTitle').textContent = pending.login ? t('connecting_to', { login: pending.login }) : t('connecting');
 		showGuard(pending);
-	} else if (st === 'qr') {
-		showView('loginView'); setMode('qr'); renderSaved(); showQr(pending); $('guardModal').classList.add('hidden');
 	} else {
-		showView('loginView'); $('guardModal').classList.add('hidden'); hideQr(); renderSaved();
-		if (pending && pending.error) showLoginError(pending.error);
-		if (pending && pending.needsRelogin && pending.login) prefillRelogin(pending.login);
+		const wasLogin = !$('loginView').classList.contains('hidden');
+		showView('loginView'); $('guardModal').classList.add('hidden');
+		if (!wasLogin) renderSaved();
+		if (pending && pending.mode === 'qr' && !pending.login) {
+			// это наш QR: показываем код, а его ошибку (истёк, прокси не работает) — прямо на месте кода
+			if (pending.status === 'qr') ui.qr.state = 'shown';
+			// (ответ опроса, ушедшего до запроса нового кода, может принести ошибку прошлого — её пропускаем)
+			else if (pending.status === 'error' && (ui.qr.state === 'shown' || (ui.qr.state === 'loading' && Date.now() - ui.qr.since > 2000))) { ui.qr.state = 'expired'; ui.qr.error = pending.error; }
+		} else {
+			if (pending && pending.error) showLoginError(pending.error);
+			if (pending && pending.needsRelogin && pending.login) prefillRelogin(pending.login);
+			// QR пропал без ошибки (например, вход другим способом отменил его) — выпускаем новый
+			if (['shown', 'loading'].includes(ui.qr.state) && !pending && Date.now() - ui.qr.since > 4000) ui.qr.state = 'idle';
+		}
+		if (ui.mode === 'qr') { renderQrBox(pending); ensureQr(); }
 	}
-}
-
-function showQr(pending) {
-	$('qrImg').src = pending.qr || '';
-	$('qrImg').classList.toggle('hidden', !pending.qr);
-	$('qrPlaceholder').classList.toggle('hidden', Boolean(pending.qr));
-	$('loginBtn').textContent = t('btn_cancel'); $('loginBtn').dataset.cancel = '1';
-}
-function hideQr() {
-	$('qrImg').classList.add('hidden'); $('qrPlaceholder').classList.remove('hidden');
-	delete $('loginBtn').dataset.cancel;
-	if (ui.mode === 'qr') $('loginBtn').textContent = t('btn_show_qr');
 }
 function showGuard(pending) {
 	$('guardModal').classList.remove('hidden');
@@ -269,7 +310,10 @@ function renderAccountBar(accounts, pending) {
 		return `<div class="acct ${a.login === ui.active ? 'sel' : ''}" data-acct="${esc(a.login)}">
 			${avatarHtml(a, 'acct-av')}
 			<span class="acct-dot ${cls}"></span>
-			<span class="acct-text"><span class="acct-name">${esc(a.personaName || a.login)}</span>${a.personaName && a.personaName !== a.login ? `<span class="acct-login">${esc(a.login)}</span>` : ''}</span>
+			<span class="acct-text" title="${esc(a.login)}"><span class="acct-name">${esc(a.personaName || a.login)}</span>${
+				// у выбранного аккаунта под ником — баланс кошелька, у остальных — логин
+				a.login === ui.active && a.wallet ? `<span class="acct-wallet">${money(a.wallet.balance)} ${esc(a.wallet.currency)}</span>`
+				: a.personaName && a.personaName !== a.login ? `<span class="acct-login">${esc(a.login)}</span>` : ''}</span>
 			${busy ? '<span class="acct-spin"><span class="spinner tiny"></span></span>' : ''}
 			<button class="acct-x" data-logout="${esc(a.login)}" title="${esc(t('logout'))}">×</button>
 		</div>`;
@@ -325,7 +369,6 @@ function renderEmptyState() {
 
 function renderTop() {
 	const s = ui.state;
-	$('walletText').textContent = s && s.wallet ? `${money(s.wallet.balance)} ${s.wallet.currency}` : '—';
 	if (!s) return;
 	$('invMeterText').textContent = `${s.inventoryCount} / ${s.inventoryLimit}`;
 	const pct = s.inventoryCount / s.inventoryLimit * 100;
@@ -554,7 +597,7 @@ async function loadStore() {
 	$('storeGrid').innerHTML = Array.from({ length: 12 }, () => '<div class="skeleton store-skeleton"></div>').join('');
 	try {
 		ui.store = await apiGet('/api/store/catalog');
-		$('storeWallet').textContent = ui.store.balance != null ? t('wallet', { balance: fmt(ui.store.balance), currency: ui.store.currency }) : '';
+		renderStoreBalance();
 		renderStore();
 	} catch (e) { $('storeGrid').innerHTML = `<p class="muted" style="padding:20px">${esc(e.message)}</p>`; }
 }
@@ -621,6 +664,21 @@ function updateCartBtn() {
 	$('cartTotal').textContent = `${money(total)} ${ui.store ? ui.store.currency : ''}`;
 	$('cartBtn').disabled = !count;
 	$('cartReset').disabled = !count;
+	renderStoreBalance(total);
+}
+
+// Баланс кошелька в магазине — крупно; с корзиной — сколько останется (красным, если не хватает).
+function renderStoreBalance(cartTotal) {
+	const st = ui.store;
+	const has = Boolean(st && st.balance != null);
+	$('storeBalance').classList.toggle('hidden', !has);
+	if (!has) return;
+	if (cartTotal == null) cartTotal = cartLines().reduce((n, l) => n + l.qty * l.unit, 0);
+	$('storeWallet').textContent = `${money(st.balance)} ${st.currency}`;
+	const left = st.balance - cartTotal;
+	$('storeAfter').classList.toggle('hidden', !cartTotal);
+	$('storeAfter').textContent = left >= 0 ? t('after_cart', { amount: `${money(left)} ${st.currency}` }) : t('not_enough', { amount: `${money(-left)} ${st.currency}` });
+	$('storeBalance').classList.toggle('short', left < 0);
 }
 
 async function toggleFavorite(def) {
@@ -643,7 +701,6 @@ async function loadSettings() {
 function openSettings() {
 	$('stickerConfirmToggle').checked = ui.settings.stickerConfirm !== false;
 	$('nudgeToggle').checked = !ui.settings.supportHideNudges;
-	$('turboToggle').checked = Boolean(ui.settings.turbo);
 	$('transferModalToggle').checked = ui.settings.transferModal !== false;
 	$('settingsModal').classList.remove('hidden');
 }
@@ -850,9 +907,23 @@ function askQuantity(name, unit) {
 
 // ============================================================ события
 document.querySelectorAll('.login-card .segmented button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
-$('loginBtn').addEventListener('click', () => $('loginBtn').dataset.cancel ? api('/api/logout', {}).then(() => poll(true)) : loginFromForm());
+$('loginBtn').addEventListener('click', () => loginFromForm());
+$('qrRefresh').addEventListener('click', () => { ui.qr.state = 'idle'; ensureQr(); });
+// прокси вписали/поменяли — QR перевыпускается уже через новый прокси (старый, без прокси, отменяется)
+let proxyTimer = null;
+const proxyChanged = () => {
+	clearTimeout(proxyTimer);
+	proxyTimer = setTimeout(() => {
+		const v = $('proxy').value.trim();
+		if (ui.mode !== 'qr' || v === (ui.qr.proxy || '')) return;
+		ui.qr.proxy = v; startQr();
+	}, 900);
+};
+$('proxy').addEventListener('input', proxyChanged);
+$('proxy').addEventListener('change', proxyChanged);
+$('remember').addEventListener('change', () => api('/api/login/remember', { remember: $('remember').checked }).catch(() => {}));
 ['crPassword', 'maPassword'].forEach(id => $(id).addEventListener('keydown', e => e.key === 'Enter' && loginFromForm()));
-$('loginBack').addEventListener('click', () => { ui.addingAccount = false; renderAccounts(ui.status || { accounts: [], pending: null }); });
+$('loginBack').addEventListener('click', () => { ui.addingAccount = false; cancelQr(); renderAccounts(ui.status || { accounts: [], pending: null }); });
 $('savedList').addEventListener('click', e => {
 	const l = e.target.dataset.login, f = e.target.dataset.forget;
 	if (l) {
@@ -877,7 +948,7 @@ $('accountBar').addEventListener('click', e => {
 	const add = e.target.closest('#addAcct');
 	const x = e.target.closest('[data-logout]');
 	const chip = e.target.closest('[data-acct]');
-	if (add) { ui.addingAccount = true; ui.maFile = null; setMode('creds'); renderLoginFlow(ui.status && ui.status.pending, true); return; }
+	if (add) { ui.addingAccount = true; ui.maFile = null; setMode('qr'); ui.qr.state = 'idle'; renderLoginFlow(ui.status && ui.status.pending, true); return; }
 	if (x) { const login = x.dataset.logout; api('/api/logout', { account: login }).then(() => { if (ui.active === login) ui.active = null; poll(true); }); return; }
 	if (chip && chip.dataset.acct !== ui.active) { ui.active = chip.dataset.acct; ui._freshActive = true; renderAccounts(ui.status); }
 });
@@ -937,13 +1008,16 @@ $('refreshBtn').addEventListener('click', async () => {
 	if (ui.op === 'take' && ui.casketId) { await loadContents(ui.casketId, true); renderItems(); }
 	$('refreshBtn').disabled = false;
 });
-$('exportBtn').addEventListener('click', async () => {
-	$('exportBtn').disabled = true;
+// Экспорт (Обзор, Ящики, Настройки): JSON + CSV инвентаря и всех ящиков текущего аккаунта.
+document.addEventListener('click', async e => {
+	const b = e.target.closest('[data-export]');
+	if (!b || b.disabled) return;
+	document.querySelectorAll('[data-export]').forEach(x => { x.disabled = true; });
 	try {
 		const r = await apiPost('/api/export', {});
 		toast(t('saved_json_csv'), 'good', window.desktop ? { label: t('open_folder'), run: () => window.desktop.openPath(r.folder) } : null);
-	} catch (e) { toast(e.message, 'bad'); }
-	$('exportBtn').disabled = false;
+	} catch (err) { toast(err.message, 'bad'); }
+	document.querySelectorAll('[data-export]').forEach(x => { x.disabled = false; });
 });
 $('storeSearch').addEventListener('input', renderStore);
 $('storeGrid').addEventListener('click', e => {
@@ -962,7 +1036,6 @@ $('settingsBtn').addEventListener('click', openSettings);
 $('settingsClose').addEventListener('click', () => $('settingsModal').classList.add('hidden'));
 $('stickerConfirmToggle').addEventListener('change', e => saveSetting({ stickerConfirm: e.target.checked }));
 $('nudgeToggle').addEventListener('change', e => saveSetting({ supportHideNudges: !e.target.checked }));
-$('turboToggle').addEventListener('change', e => saveSetting({ turbo: e.target.checked }));
 $('transferModalToggle').addEventListener('change', e => saveSetting({ transferModal: e.target.checked }));
 document.addEventListener('keydown', e => {
 	if (e.key !== 'Escape') return;
@@ -1078,8 +1151,8 @@ async function loadTradeup() {
 	$('tuEmpty').classList.remove('hidden'); $('tuPanel').classList.add('hidden');
 	try {
 		ui.tu.groups = await apiGet('/api/tradeup/groups' + ($('tuCaskets').checked ? '?caskets=1' : ''));
-		ui.tu.rarity = null; ui.tu.stattrak = null; ui.tu.picks = {};
-		renderTuGroups(); tuUpdateAction();
+		ui.tu.rarity = null; ui.tu.stattrak = null; ui.tu.picks = {}; ui.tu.preview = null;
+		renderTuGroups(); tuUpdateAction(); renderTuOdds();
 	} catch (e) { $('tuGroups').innerHTML = `<p class="muted" style="padding:16px">${esc(e.message)}</p>`; }
 }
 
@@ -1099,7 +1172,7 @@ function renderTuGroups() {
 }
 
 function selectTuGroup(rarity, stattrak) {
-	ui.tu.rarity = rarity; ui.tu.stattrak = stattrak; ui.tu.picks = {};
+	ui.tu.rarity = rarity; ui.tu.stattrak = stattrak; ui.tu.picks = {}; ui.tu.preview = null;
 	renderTuGroups();
 	const g = currentTuGroup();
 	$('tuEmpty').classList.toggle('hidden', Boolean(g));
@@ -1107,7 +1180,20 @@ function selectTuGroup(rarity, stattrak) {
 	if (g) { $('tuGroupName').textContent = gradeName(g.rarity, g.stattrak) + ' · ' + g.total; renderTuItems(); }
 }
 
+const EYE = '<svg viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>';
+const fl4 = f => f == null ? '—' : Number(f).toFixed(4);
+const marketUrl = name => `https://steamcommunity.com/market/listings/730/${encodeURIComponent(name)}`;
 const tuTotal = () => Object.values(ui.tu.picks).reduce((a, b) => a + b, 0);
+// Выбранные id: у каждого скина берутся первые N (сервер сортирует их по float — от меньшего).
+function tuPickedIds() {
+	const g = currentTuGroup(); if (!g) return [];
+	const ids = [];
+	for (const [name, count] of Object.entries(ui.tu.picks)) {
+		const it = g.items.find(x => x.name === name);
+		if (it) ids.push(...it.ids.slice(0, count));
+	}
+	return ids;
+}
 function tuSetPick(name, value, max) { const n = Math.max(0, Math.min(max, Math.floor(Number(value) || 0))); if (n) ui.tu.picks[name] = n; else delete ui.tu.picks[name]; }
 
 // Выбор предметов для контракта: сверху 10 слотов (заполняются выбранными), ниже — карточки скинов.
@@ -1122,12 +1208,21 @@ function renderTuItems() {
 		return `<div class="tu-card r${g.rarity} ${n ? 'picked' : ''} ${full ? 'dim' : ''}" data-tu="${esc(i.name)}" title="${esc(i.name)}">
 			${n ? `<span class="tu-n">×${n}</span><button class="tu-minus" data-tuminus="${esc(i.name)}">−</button>` : ''}
 			<div class="tu-img">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy">` : ''}</div>
+			${i.inspect ? `<button class="tu-eye" data-insp-game="${esc(i.inspect)}" title="${esc(t('craft_inspect'))}">${EYE}</button>` : ''}
 			<div class="tu-name">${esc(i.name)}</div>
 			<div class="tu-sub">${t('in_inventory')}: ${fmt(i.count - (i.stored || 0))}${i.stored ? ` · ${t('in_casket')}: ${fmt(i.stored)}` : ''}</div>
+			${tuFloatRange(i)}
 		</div>`;
 	}).join('') || `<div class="empty-box">${esc(t('nothing_found'))}</div>`;
 	renderTuTray();
 	tuUpdateAction();
+}
+
+function tuFloatRange(i) {
+	const f = (i.floats || []).filter(x => x != null);
+	if (!f.length) return '';
+	const lo = Math.min(...f), hi = Math.max(...f);
+	return `<div class="tu-float">float ${fl4(lo)}${hi !== lo ? ` – ${fl4(hi)}` : ''}</div>`;
 }
 
 function renderTuTray() {
@@ -1135,13 +1230,61 @@ function renderTuTray() {
 	const slots = [];
 	for (const [name, n] of Object.entries(ui.tu.picks)) {
 		const it = g.items.find(x => x.name === name);
-		for (let k = 0; k < n; k++) slots.push(it);
+		for (let k = 0; k < n; k++) slots.push({ it, float: it.floats ? it.floats[k] : null, id: it.ids[k] });
 	}
+	const insp = new Map(((ui.tu.preview && ui.tu.preview.inputs) || []).map(x => [x.id, x.inspect]));
 	$('tuTray').innerHTML = Array.from({ length: 10 }, (_, i) => {
-		const it = slots[i];
-		return it ? `<div class="tu-slot full r${g.rarity}" data-tuminus="${esc(it.name)}" title="${esc(it.name)}">${it.image ? `<img src="${esc(it.image)}" alt="">` : `<span>${esc(it.name.slice(0, 10))}</span>`}</div>`
-			: `<div class="tu-slot"><span>${i + 1}</span></div>`;
+		const sl = slots[i];
+		if (!sl) return `<div class="tu-slot"><span>${i + 1}</span></div>`;
+		const it = sl.it, link = insp.get(sl.id);
+		return `<div class="tu-slot full r${g.rarity}" data-tuminus="${esc(it.name)}" title="${esc(it.name)}${sl.float != null ? ` · float ${fl4(sl.float)}` : ''}">${it.image ? `<img src="${esc(it.image)}" alt="">` : `<span>${esc(it.name.slice(0, 10))}</span>`}
+			${sl.float != null ? `<span class="tu-slot-fl">${fl4(sl.float)}</span>` : ''}
+			${link ? `<button class="tu-eye small" data-insp-game="${esc(link)}" title="${esc(t('craft_inspect'))}">${EYE}</button>` : ''}</div>`;
 	}).join('');
+}
+
+// Прогноз: исходы с шансами и ожидаемым float (запрашиваем у сервера после каждого изменения выбора).
+let tuPreviewTimer = null, tuPreviewSeq = 0;
+function scheduleTuPreview() {
+	clearTimeout(tuPreviewTimer);
+	const ids = tuPickedIds();
+	if (!ids.length) { ui.tu.preview = null; renderTuOdds(); return; }
+	tuPreviewTimer = setTimeout(async () => {
+		const seq = ++tuPreviewSeq;
+		try {
+			const r = await apiPost('/api/tradeup/preview', { itemIds: ids });
+			if (seq !== tuPreviewSeq) return;
+			ui.tu.preview = r; renderTuOdds(); renderTuTray();
+		} catch (e) { /* прогноз необязателен */ }
+	}, 200);
+}
+
+function renderTuOdds() {
+	const p = ui.tu.preview;
+	const g = currentTuGroup();
+	$('tuOdds').classList.toggle('hidden', !g);
+	if (!g) return;
+	if (!p || !p.count) {
+		$('tuOddsSub').textContent = '';
+		$('tuOddsList').innerHTML = `<div class="tu-odds-empty muted small">${esc(t('tu_pick_more'))}</div>`;
+		return;
+	}
+	const sub = [];
+	if (p.count < 10) sub.push(t('tu_partial', { n: p.count }));
+	if (p.avgFloat != null) sub.push(`${t('tu_avg_float')}: ${fl4(p.avgFloat)}`);
+	$('tuOddsSub').textContent = sub.join(' · ');
+	const nextColor = RARITY_COLORS[g.rarity + 1] || '#8847ff';
+	$('tuOddsList').innerHTML = (p.unknown && p.unknown.length ? `<div class="tu-odds-warn">${esc(t('tu_unknown', { names: [...new Set(p.unknown)].join(', ') }))}</div>` : '')
+		+ p.outcomes.map(o => `<div class="tu-out" style="--rc:${nextColor}">
+			<div class="tu-out-img">${o.image ? `<img src="${esc(o.image)}" alt="" loading="lazy">` : ''}</div>
+			<div class="tu-out-body">
+				<div class="tu-out-name" title="${esc(o.name)}">${esc(o.name)}</div>
+				<div class="muted small">${o.float != null ? `float ≈ ${fl4(o.float)} · ${esc(o.exterior)}` : esc(o.collection || '')}</div>
+				<div class="tu-out-bar"><i style="width:${Math.max(2, o.chance * 100).toFixed(1)}%"></i></div>
+			</div>
+			<div class="tu-out-side"><b>${(o.chance * 100).toFixed(o.chance < 0.1 ? 1 : 0)}%</b>
+				<button class="tu-mkt" data-open="${esc(marketUrl(o.marketName))}" title="${esc(t('craft_market'))}">${esc(t('tu_market_short'))}</button></div>
+		</div>`).join('');
 }
 
 function tuUpdateAction() {
@@ -1149,6 +1292,7 @@ function tuUpdateAction() {
 	$('tuCount').textContent = total;
 	$('tuWarn').textContent = total === 10 ? '' : (total > 10 ? t('tradeup_need10', { n: total }) : '');
 	$('tuDo').disabled = total !== 10;
+	scheduleTuPreview();
 
 }
 
@@ -1160,17 +1304,24 @@ function showCraftResult(r) {
 	$('craftName').textContent = r.name || t('tradeup_done_unknown');
 	$('craftGrade').textContent = r.rarity ? ((r.stattrak ? 'StatTrak™ ' : '') + (RARITY_NAMES[r.rarity] || '')) : '';
 	$('craftGrade').classList.toggle('hidden', !r.rarity);
+	$('craftFloat').textContent = r.float != null ? `float ${Number(r.float).toFixed(6)}` : '';
+	// «На Торговой площадке» — сразу (по названию); «Осмотреть» — когда предмет появится в веб-инвентаре
+	$('craftMarket').classList.toggle('hidden', !r.name);
+	$('craftMarket').onclick = () => openExt(marketUrl(r.name));
+	const insp = $('craftInspect');
+	insp.classList.toggle('hidden', !r.id);
+	insp.disabled = true; insp.title = t('craft_inspect_wait'); insp.onclick = null;
+	if (r.id) apiGet('/api/inspect?wait=1&id=' + encodeURIComponent(r.id)).then(x => {
+		if (!x.link) { insp.classList.add('hidden'); return; }
+		insp.disabled = false; insp.title = ''; insp.onclick = () => openExt(x.link);
+	}).catch(() => insp.classList.add('hidden'));
 	$('craftModal').classList.remove('hidden');
 	$('craftOk').focus();
 }
 
 async function runTradeUp() {
 	const g = currentTuGroup(); if (!g) return;
-	const ids = [];
-	for (const [name, count] of Object.entries(ui.tu.picks)) {
-		const it = g.items.find(x => x.name === name);
-		if (it) ids.push(...it.ids.slice(0, count));
-	}
+	const ids = tuPickedIds();
 	if (ids.length !== 10) return toast(t('tradeup_need10', { n: ids.length }), 'bad');
 	if (!(await miniConfirm({ warn: true, title: t('tradeup_do'), text: t('tradeup_confirm') })).ok) return;
 	$('tuDo').disabled = true;
@@ -1183,7 +1334,11 @@ async function runTradeUp() {
 }
 
 $('tuGroups').addEventListener('click', e => { const el = e.target.closest('[data-rarity]'); if (el) selectTuGroup(Number(el.dataset.rarity), el.dataset.st === '1'); });
+// «Осмотреть» на карточке/слоте и «ТП» у исхода — не выбирают предмет
+const tuLink = e => { const b = e.target.closest('[data-insp-game],[data-open]'); if (!b) return false; openExt(b.dataset.inspGame || b.dataset.open); return true; };
+$('tuOddsList').addEventListener('click', tuLink);
 $('tuItems').addEventListener('click', e => {
+	if (tuLink(e)) return;
 	const minus = e.target.closest('[data-tuminus]');
 	const card = e.target.closest('[data-tu]');
 	const g = currentTuGroup(); if (!g) return;
@@ -1193,7 +1348,7 @@ $('tuItems').addEventListener('click', e => {
 		if (it && tuTotal() < 10) { tuSetPick(it.name, (ui.tu.picks[it.name] || 0) + 1, it.count); renderTuItems(); }
 	}
 });
-$('tuTray').addEventListener('click', e => { const s2 = e.target.closest('[data-tuminus]'); if (s2) { tuSetPick(s2.dataset.tuminus, (ui.tu.picks[s2.dataset.tuminus] || 0) - 1, 999); renderTuItems(); } });
+$('tuTray').addEventListener('click', e => { if (tuLink(e)) return; const s2 = e.target.closest('[data-tuminus]'); if (s2) { tuSetPick(s2.dataset.tuminus, (ui.tu.picks[s2.dataset.tuminus] || 0) - 1, 999); renderTuItems(); } });
 $('tuSearch').addEventListener('input', renderTuItems);
 $('tuClear').addEventListener('click', () => { ui.tu.picks = {}; renderTuItems(); });
 $('tuDo').addEventListener('click', runTradeUp);
@@ -1789,7 +1944,7 @@ function renderStickers() {
 				<div class="acts"><button data-scrape="${esc(w.id)}" data-slot="${i}">${esc(t('st_scrape'))}</button><button class="rm" data-remove="${esc(w.id)}" data-slot="${i}">${esc(t('delete'))}</button></div></div>`;
 			return sel ? `<div class="st-slot target" data-put="${esc(w.id)}" data-slot="${i}">+ ${esc(t('st_put'))}</div>` : `<div class="st-slot"><span class="muted">${i + 1}</span></div>`;
 		}).join('');
-		const insp = w.inspect ? `<span class="st-insp"><button class="btn ghost small" data-insp-game="${esc(w.inspect)}">${esc(t('inspect_game'))}</button><button class="btn ghost small" data-insp-web="${esc(w.inspect)}">CSFloat</button></span>` : '';
+		const insp = w.inspect ? `<span class="st-insp"><button class="btn ghost small" data-insp-game="${esc(w.inspect)}">${esc(t('inspect_game'))}</button><button class="btn ghost small" data-insp-copy="${esc(w.inspect)}">${esc(t('copy_link'))}</button></span>` : '';
 		return `<div class="st-w">${w.image ? `<img src="${esc(w.image)}" alt="" loading="lazy">` : '<span class="ph"></span>'}<div><div class="st-wh"><span class="strong">${esc(w.name)}</span>${insp}</div><div class="st-slots">${slots}</div></div></div>`;
 	}).join('') : `<div class="empty-box">${esc(t('st_no_weapons'))}</div>`;
 }
@@ -1830,7 +1985,7 @@ $('stStickers').addEventListener('click', e => { const s = e.target.closest('[da
 $('stWeapons').addEventListener('click', e => {
 	const d = e.target.dataset;
 	if (d.inspGame) openExt(d.inspGame);
-	if (d.inspWeb) { copyText(d.inspWeb); openExt('https://csfloat.com/checker'); toast(t('inspect_pasted')); }
+	if (d.inspCopy) copyText(d.inspCopy);
 	if (d.put) stickerApply(d.put, Number(d.slot));
 	if (d.scrape) stickerAct('/api/stickers/scrape', { weaponId: d.scrape, slot: Number(d.slot) }, t('st_scraped'));
 	if (d.remove) stickerRemove(d.remove, Number(d.slot));
@@ -1984,7 +2139,7 @@ if (window.desktop) {
 		$('toasts').appendChild(el);
 	});
 }
-setMode('creds');
+setMode('qr');
 try {
 	const r = JSON.parse(sessionStorage.getItem('ui_restore') || 'null');
 	sessionStorage.removeItem('ui_restore');

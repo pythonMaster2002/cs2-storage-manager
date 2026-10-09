@@ -1,8 +1,10 @@
 // Наклейки на оружии: наклеить, соскоблить, удалить — через Game Coordinator (ApplySticker, 1086).
 //   наклеить:   { sticker_item_id, item_item_id, sticker_slot }
-//   соскоблить: { item_item_id, sticker_slot, sticker_wear_target: N/100 } — износ до N% (как ползунок в игре 0..100)
-//   удалить:    { item_item_id, sticker_slot, sticker_wear_target: 1.11 }  — клиент CS2 шлёт 111 = «удалить совсем»
-// (см. panorama popup_capability_can_sticker.js: InventoryAPI.WearItemSticker(itemId, slot, target|111)).
+//   соскоблить: { item_item_id, sticker_slot } — один шаг соскабливания (GC сам прибавляет ~11–15% износа)
+//   удалить:    соскабливать, пока наклейка не исчезнет: на износе 100% следующий шаг снимает её,
+//               оружие при этом получает новый id (уведомление RemoveSticker, 1053).
+// Поле sticker_wear_target (11) из свежих протоколов GC не принимает: с ним пакет молча отбрасывается
+// (проверено на живом аккаунте 09.10.2026) — поэтому его не шлём.
 'use strict';
 
 const Protos = require('globaloffensive/protobufs/generated/_load.js');
@@ -21,8 +23,10 @@ const isWeapon = it => !it.casket_id && it.def_index > 0 && it.def_index < 100
 
 // Реальные id предметов из инвентаря Steam (контексты 2 и 16 — обычные и защищённые после обмена).
 // GC иногда держит предметы, которых у игрока нет (превью, X-Ray и т.п.) — сверяемся с сайтом.
-async function webAssetIds(session) {
-	if (session._webAssets && Date.now() - session._webAssets.ts < 60000) return session._webAssets;
+// Ссылка «Осмотреть» в CS2: steam://run/730//+csgo_econ_action_preview%20%propid:6% — вместо %propid:6%
+// подставляется «сертификат предмета» из asset_properties (подписан Steam, сами его не собрать).
+async function webAssetIds(session, fresh = false) {
+	if (!fresh && session._webAssets && Date.now() - session._webAssets.ts < 60000) return session._webAssets;
 	if (!session.webCookies) return null;
 	const set = new Set();
 	const inspect = new Map();  // assetid -> ссылка «осмотреть» (steam://…csgo_econ_action_preview…)
@@ -33,10 +37,15 @@ async function webAssetIds(session) {
 			if (res.status !== 200) { if (ctx === 2) return null; continue; }
 			const d = JSON.parse(res.body);
 			const links = new Map((d.descriptions || []).map(x => [`${x.classid}_${x.instanceid}`, ((x.actions || [])[0] || {}).link]));
+			const props = new Map((d.asset_properties || []).map(x => [String(x.assetid), new Map((x.asset_properties || []).map(p => [String(p.propertyid), p.string_value]))]));
 			for (const a of d.assets || []) {
 				set.add(String(a.assetid));
 				const l = links.get(`${a.classid}_${a.instanceid}`);
-				if (l) inspect.set(String(a.assetid), l.replace('%owner_steamid%', sid).replace('%assetid%', a.assetid));
+				if (!l) continue;
+				const pr = props.get(String(a.assetid));
+				const link = l.replace('%owner_steamid%', sid).replace('%assetid%', a.assetid)
+					.replace(/%propid:(\d+)%/g, (m, id) => (pr && pr.get(id)) || m);
+				if (!/%\w+(:\d+)?%/.test(link)) inspect.set(String(a.assetid), link);  // без неподставленных полей
 			}
 		}
 	} catch (e) { return null; }
@@ -68,11 +77,8 @@ function weapon(session, id) {
 	return w;
 }
 
-function send(session, msg, wearTarget) {
-	let buf = Buffer.from(Protos.CMsgApplySticker.encode(msg).finish());
-	// sticker_wear_target (поле 11, float) есть в свежих протоколах CS2, но нет в библиотеке — дописываем вручную.
-	if (wearTarget != null) { const f = Buffer.alloc(5); f[0] = (11 << 3) | 5; f.writeFloatLE(wearTarget, 1); buf = Buffer.concat([buf, f]); }
-	session.user.sendToGC(730, APPLY_STICKER, {}, buf);
+function send(session, msg) {
+	session.user.sendToGC(730, APPLY_STICKER, {}, Buffer.from(Protos.CMsgApplySticker.encode(msg).finish()));
 }
 
 // Ждём, пока GC обновит предмет (стикеры на оружии меняются через SO_Update).
@@ -109,25 +115,35 @@ async function apply(session, weaponId, stickerItemId, slot) {
 	return { ok: true, slot: Number(slot), weaponId: String(ok.id) };
 }
 
+// Один шаг соскабливания; remove — шагаем, пока наклейка не исчезнет (обычно 5–9 шагов).
 async function scrape(session, weaponId, slot, remove) {
 	session.ensureOnline();
-	const w = weapon(session, weaponId);
-	const cur = (w.stickers || []).find(s => s.slot === Number(slot));
-	if (!cur) throw new Error('в этом слоте нет наклейки');
-	const before = cur.wear || 0;
-	// Шаг соскабливания — +10% к текущему износу (в игре это ползунок); полностью стёртая — удаляется.
-	const target = remove ? 111 : Math.min(100, Math.ceil(before * 100) + 10);
-	const changed = x => { const st = (x.stickers || []).find(y => y.slot === Number(slot)); return !st || (st.wear || 0) > before; };
-	// Кодировка цели в протоколе не задокументирована: сначала доля (0.35 / 1.11), затем «как в интерфейсе» (35 / 111).
-	let ok = null;
-	for (const [i, value] of [target >= 100 ? 1.11 : target / 100, target].entries()) {
-		send(session, { item_item_id: String(w.id), sticker_slot: Number(slot) }, value);
-		ok = await waitChange(session, w.id, changed, i === 0 ? 7000 : 12000);
-		if (ok) { session.emit('log', `наклейка: ${remove ? 'удаление' : 'соскабливание'} сработало с wear_target=${value}`); break; }
+	slot = Number(slot);
+	let w = weapon(session, weaponId);
+	if (!(w.stickers || []).some(s => s.slot === slot)) throw new Error('в этом слоте нет наклейки');
+	for (let step = 0; step < (remove ? 20 : 1); step++) {
+		const cur = (w.stickers || []).find(s => s.slot === slot);
+		if (!cur) break;
+		const before = cur.wear || 0;
+		send(session, { item_item_id: String(w.id), sticker_slot: slot });
+		const next = await waitChange(session, w.id, x => { const st = (x.stickers || []).find(y => y.slot === slot); return !st || (st.wear || 0) > before; }, 12000);
+		if (!next) throw new Error(step ? `GC перестал отвечать (сделано шагов: ${step}) — попробуйте ещё раз` : 'GC не ответил — попробуйте ещё раз');
+		w = next;
 	}
-	if (!ok) throw new Error('GC не ответил — попробуйте ещё раз');
-	const now = (ok.stickers || []).find(y => y.slot === Number(slot));
-	return { removed: !now, wear: now ? now.wear || 0 : null };
+	const now = (w.stickers || []).find(y => y.slot === slot);
+	return { removed: !now, wear: now ? now.wear || 0 : null, weaponId: String(w.id) };
 }
 
-module.exports = { state, apply, scrape };
+// Ссылка «Осмотреть» для предмета; wait — подождать, пока новый предмет (например, после контракта)
+// появится в веб-инвентаре Steam.
+async function inspectLink(session, itemId, wait = false) {
+	for (let i = 0; i < (wait ? 5 : 1); i++) {
+		if (i) await sleep(2500);
+		const web = await webAssetIds(session, wait);
+		const l = web && web.inspect.get(String(itemId));
+		if (l) return l;
+	}
+	return null;
+}
+
+module.exports = { state, apply, scrape, webAssetIds, inspectLink };

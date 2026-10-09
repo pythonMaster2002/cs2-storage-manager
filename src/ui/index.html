@@ -33,22 +33,27 @@
 			</div>
 
 			<div class="segmented" role="tablist">
-				<button data-mode="creds" class="active" data-i18n="tab_creds">Логин и пароль</button>
-				<button data-mode="qr" data-i18n="tab_qr">QR-код</button>
+				<button data-mode="qr" class="active" data-i18n="tab_qr">QR-код</button>
+				<button data-mode="creds" data-i18n="tab_creds">Логин и пароль</button>
 				<button data-mode="mafile" data-i18n="tab_mafile">maFile</button>
 			</div>
 
-			<div data-pane="qr" class="hidden">
+			<div data-pane="qr">
 				<div class="qr-box">
-					<div id="qrPlaceholder" class="qr-placeholder">
+					<div id="qrPlaceholder" class="qr-placeholder loading">
 						<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM14 18h2v2h-2zM18 14h2v2h-2z" fill="currentColor"/></svg>
 					</div>
 					<img id="qrImg" class="hidden" alt="QR">
+					<div id="qrExpired" class="qr-expired hidden">
+						<div class="strong" id="qrExpiredText" data-i18n="qr_expired">QR-код истёк</div>
+						<button id="qrRefresh" class="btn primary small" data-i18n="qr_refresh">Новый QR-код</button>
+					</div>
 				</div>
+				<p id="qrStatus" class="qr-status muted small" data-i18n="qr_loading">Готовим QR-код…</p>
 				<p class="hint" data-i18n="qr_hint">Откройте приложение Steam на телефоне → Steam Guard → значок QR и отсканируйте код.</p>
 			</div>
 
-			<div data-pane="creds">
+			<div data-pane="creds" class="hidden">
 				<label><span data-i18n="field_login">Логин</span><input id="crLogin" autocomplete="username" spellcheck="false"></label>
 				<label><span data-i18n="field_password">Пароль</span><input id="crPassword" type="password" autocomplete="current-password"></label>
 			</div>
@@ -68,7 +73,7 @@
 			<p class="hint" data-i18n="proxy_hint">Если прокси задан — весь трафик идёт только через него.</p>
 			<label class="check"><input id="remember" type="checkbox" checked> <span data-i18n="remember">Запомнить аккаунт на этом компьютере</span></label>
 
-			<button id="loginBtn" class="btn primary block" data-i18n="btn_login">Войти</button>
+			<button id="loginBtn" class="btn primary block hidden" data-i18n="btn_login">Войти</button>
 			<p id="loginError" class="error-text hidden"></p>
 		</div>
 		<p class="footnote" data-i18n="login_footnote">Пароль не сохраняется. Данные входа хранятся только на этом компьютере в зашифрованном виде.</p>
@@ -94,9 +99,6 @@
 		</div>
 		<!-- переключатель аккаунтов -->
 		<div class="account-bar" id="accountBar"></div>
-		<div class="wallet-block" id="walletBlock" data-i18n-title="wallet_title" title="Кошелёк Steam">
-			<span class="muted small" data-i18n="wallet_label">Кошелёк</span><b id="walletText">—</b>
-		</div>
 		<div class="meter-block" title="" data-i18n-title="inventory">
 			<div class="meter-label"><span data-i18n="inventory">Инвентарь</span><span id="invMeterText"></span></div>
 			<div class="meter"><i id="invMeter"></i></div>
@@ -105,7 +107,6 @@
 		<button class="btn ghost icon-btn" id="refreshBtn" data-i18n-title="refresh" title="Обновить">
 			<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
 		</button>
-		<button class="btn ghost" id="exportBtn" data-i18n="export">Экспорт</button>
 		<button class="heart-mini top-heart" id="headerSupport" data-i18n-title="support_title" title="Поддержать разработчика"><svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2Z" fill="currentColor"/></svg></button>
 		<button class="btn ghost icon-btn" id="settingsBtn" data-i18n-title="settings" title="Настройки"><svg viewBox="0 0 24 24"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.4-2.3.9a7.5 7.5 0 0 0-2.6-1.5L14.2 2.5h-4l-.4 2.5a7.5 7.5 0 0 0-2.6 1.5l-2.3-.9-2 3.4 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.4 2.3-.9a7.5 7.5 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.5 7.5 0 0 0 2.6-1.5l2.3.9 2-3.4-2-1.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
 	</header>
@@ -148,6 +149,7 @@
 				<button data-scope="all"><span data-i18n="ov_all">Все аккаунты</span> <span class="badge" id="ovAllCnt"></span></button>
 			</div>
 			<span class="spacer"></span>
+			<button class="btn ghost small export-btn" data-export><svg viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="export">Экспорт</span></button>
 			<button class="btn ghost icon-btn" id="ovRefresh" data-i18n-title="refresh" title="Обновить"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 		</div>
 		<div id="ovTiles" class="ov-tiles"></div>
@@ -175,6 +177,7 @@
 			<div class="sidebar-foot">
 				<button class="btn ghost block" id="rulesBtn" data-i18n="rules_btn">Правила перекладки</button>
 				<button class="btn ghost block" id="buyBtn" data-i18n="buy_container">Купить контейнер</button>
+				<button class="btn ghost block export-btn" data-export><svg viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="export_caskets">Экспорт ящиков (JSON/CSV)</span></button>
 			</div>
 		</aside>
 
@@ -233,7 +236,11 @@
 		<div class="store-head">
 			<div>
 				<div class="section-title" data-i18n="store_title">Магазин CS2</div>
-				<div class="muted small" id="storeWallet"></div>
+			</div>
+			<div class="store-balance hidden" id="storeBalance">
+				<span class="sb-label" data-i18n="wallet_label">Кошелёк</span>
+				<b id="storeWallet"></b>
+				<span class="sb-after hidden" id="storeAfter"></span>
 			</div>
 			<div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
 				<input id="storeSearch" data-i18n-ph="search_product" placeholder="Поиск товара" spellcheck="false"></div>
@@ -272,6 +279,11 @@
 					<div id="tuItems" class="tu-grid"></div>
 				</div>
 			</main>
+			<aside class="tu-odds hidden" id="tuOdds">
+				<div class="section-title" data-i18n="tu_odds_title">Возможный результат</div>
+				<div class="muted small" id="tuOddsSub"></div>
+				<div id="tuOddsList" class="tu-odds-list"></div>
+			</aside>
 		</div>
 		<div class="action-bar">
 			<div><span class="strong" id="tuCount">0</span> <span class="muted">/ 10</span></div>
@@ -398,10 +410,10 @@
 			<span><span class="strong" data-i18n="st_confirm_setting">Подтверждать нанесение наклеек</span><span class="muted small block-text" data-i18n="st_confirm_setting_desc">Перед нанесением показывать окно подтверждения.</span></span>
 			<input type="checkbox" id="stickerConfirmToggle" class="switch">
 		</label>
-		<label class="switch-row">
-			<span><span class="strong" data-i18n="turbo_setting">Турбо-перекладка (экспериментально)</span><span class="muted small block-text" data-i18n="turbo_setting_desc">Примерно вдвое быстрее, но иногда Steam отвечает с ошибками — тогда приложение повторит предметы автоматически.</span></span>
-			<input type="checkbox" id="turboToggle" class="switch">
-		</label>
+		<div class="switch-row">
+			<span><span class="strong" data-i18n="export_setting">Экспорт инвентаря и ящиков</span><span class="muted small block-text" data-i18n="export_setting_desc">Файлы JSON и CSV со всем содержимым текущего аккаунта.</span></span>
+			<button class="btn ghost small export-btn" data-export><svg viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="export">Экспорт</span></button>
+		</div>
 		<label class="switch-row">
 			<span><span class="strong" data-i18n="transfer_modal_setting">Итог перекладки в отдельном окне</span><span class="muted small block-text" data-i18n="transfer_modal_setting_desc">Иначе — короткое уведомление сбоку.</span></span>
 			<input type="checkbox" id="transferModalToggle" class="switch">
@@ -429,6 +441,11 @@
 		<div class="craft-img" id="craftImg"></div>
 		<div class="craft-name" id="craftName"></div>
 		<div class="craft-grade" id="craftGrade"></div>
+		<div class="craft-float muted small" id="craftFloat"></div>
+		<div class="craft-actions">
+			<button class="btn ghost" id="craftInspect"><span data-i18n="craft_inspect">Осмотреть в игре</span></button>
+			<button class="btn ghost" id="craftMarket"><span data-i18n="craft_market">На Торговой площадке</span></button>
+		</div>
 		<button class="btn primary big" id="craftOk">OK</button>
 	</div>
 </div>

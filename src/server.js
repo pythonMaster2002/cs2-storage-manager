@@ -10,6 +10,13 @@ const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
 const QRCode = require('qrcode');
+
+// Картинка QR рисуется локально (без сторонних сервисов); кэш — чтобы не перерисовывать на каждый опрос статуса.
+let qrCache = { url: null, img: null };
+async function qrImage(url) {
+	if (qrCache.url !== url) qrCache = { url, img: await QRCode.toDataURL(url, { margin: 1, width: 280 }) };
+	return qrCache.img;
+}
 const SteamUser = require('steam-user');
 const { CasketSession, AccountStore, humanError } = require('./core/session');
 
@@ -33,7 +40,7 @@ class Manager {
 	// Настройки всего приложения (не аккаунта): быстрая покупка, избранное магазина.
 	// Хранятся на диске, а не в localStorage — порт сервера (и origin страницы) меняется при каждом запуске.
 	settings() {
-		const def = { favorites: [], autoAcceptGifts: false, rules: [], autoApplyRules: false, supportNudgeAt: 0, supportHideNudges: false, stickerConfirm: true, welcomed: false, tourDone: false, navCollapsed: false, turbo: false, transferModal: true };
+		const def = { favorites: [], autoAcceptGifts: false, rules: [], autoApplyRules: false, supportNudgeAt: 0, supportHideNudges: false, stickerConfirm: true, welcomed: false, tourDone: false, navCollapsed: false, transferModal: true };
 		try { return { ...def, ...JSON.parse(fs.readFileSync(this.settingsFile, 'utf8')) }; } catch (e) { return def; }
 	}
 
@@ -44,7 +51,7 @@ class Manager {
 		if (typeof patch.lang === 'string' && /^[a-z]{2}$/.test(patch.lang)) cur.lang = patch.lang;
 		if ('supportNudgeAt' in patch) cur.supportNudgeAt = Number(patch.supportNudgeAt) || 0;
 		if ('supportHideNudges' in patch) cur.supportHideNudges = Boolean(patch.supportHideNudges);
-		for (const k of ['stickerConfirm', 'welcomed', 'tourDone', 'navCollapsed', 'turbo', 'transferModal']) if (k in patch) cur[k] = Boolean(patch[k]);
+		for (const k of ['stickerConfirm', 'welcomed', 'tourDone', 'navCollapsed', 'transferModal']) if (k in patch) cur[k] = Boolean(patch[k]);
 		if (Array.isArray(patch.rules)) {
 			const kinds = ['any', 'container', 'sticker', 'skin', 'knifeglove', 'graffiti', 'other'];
 			cur.rules = patch.rules.slice(0, 50).map(r => ({
@@ -149,8 +156,10 @@ function start({ dataDir, secretBox, exportDir }) {
 		const p = mgr.pending;
 		const pending = p ? {
 			...mgr.brief(p),
-			guardDomain: p.guardDomain, guardWrong: p.guardWrong,
-			qr: p.status === 'qr' && p.qrUrl ? await QRCode.toDataURL(p.qrUrl, { margin: 1, width: 280 }) : null,
+			mode: p.mode, guardDomain: p.guardDomain, guardWrong: p.guardWrong,
+			qr: p.status === 'qr' && p.qrUrl ? await qrImage(p.qrUrl) : null,
+			qrLeft: p.status === 'qr' && p.qrExpires ? Math.max(0, Math.round((p.qrExpires - Date.now()) / 1000)) : null,
+			qrScanned: p.status === 'qr' ? Boolean(p.qrScanned) : false,
 		} : null;
 		return { accounts, pending, log: mgr.logLines.slice(-25), alerts: mgr.guard ? mgr.guard.alerts.slice(-10) : [] };
 	}));
@@ -166,6 +175,8 @@ function start({ dataDir, secretBox, exportDir }) {
 
 	app.post('/api/login', handle(req => {
 		const { mode, login, password, maFile, proxy, remember } = req.body;
+		// QR на экране входа висит «в фоне» — любой другой вход (или новый QR) просто заменяет его.
+		if (mgr.pending && mgr.pending.status === 'qr') { mgr.pending.logout(); mgr.pending = null; }
 		if (mgr.pending && ['connecting', 'guard', 'qr'].includes(mgr.pending.status)) throw new Error('дождитесь завершения текущего входа');
 		const session = mgr.pending = mgr.newSession();
 		session.start({ mode, login: login && login.trim(), password, maFile, proxy: proxy ? proxy.trim() : proxy, remember })
@@ -177,9 +188,15 @@ function start({ dataDir, secretBox, exportDir }) {
 					.then(p => p.total && mgr.log(`${session.login}: правила после входа — ${p.total} шт`))
 					.catch(e => mgr.log(`${session.login}: правила — ${humanError(e)}`)), 6000);
 			})
-			.catch(e => mgr.log(`ошибка входа${session.login ? ' ' + session.login : ''}: ${humanError(e)}`));
+			.catch(e => { if (!/QR отменён|вход прерван/.test(e.message)) mgr.log(`ошибка входа${session.login ? ' ' + session.login : ''}: ${humanError(e)}`); });
 		return { ok: true };
 	}));
+	app.post('/api/login/qr/cancel', handle(() => {
+		const p = mgr.pending;
+		if (p && p.mode === 'qr' && !p.qrScanned && ['connecting', 'qr', 'error'].includes(p.status) && !(p.status === 'connecting' && p.login)) { p.logout(); mgr.pending = null; }
+		return { ok: true };
+	}));
+	app.post('/api/login/remember', handle(req => { if (mgr.pending) mgr.pending.remember = Boolean(req.body.remember); return { ok: true }; }));
 	app.post('/api/guard', handle(req => { if (!mgr.pending) throw new Error('код сейчас не запрашивается'); mgr.pending.submitGuardCode(req.body.code || ''); return { ok: true }; }));
 
 	app.post('/api/logout', handle(req => {
@@ -227,13 +244,11 @@ function start({ dataDir, secretBox, exportDir }) {
 	};
 
 	app.post('/api/store', handle(async req => {
-		pick(req).turbo = Boolean(mgr.settings().turbo);
 		const s = pick(req);
 		const ids = pickIds((await s.snapshot()).inventory, req.body.items, 'movable');
 		return s.storeItems(req.body.casketId, ids, req.body.casketName);
 	}));
 	app.post('/api/take', handle(async req => {
-		pick(req).turbo = Boolean(mgr.settings().turbo);
 		const s = pick(req);
 		const ids = pickIds(await s.casketContents(req.body.casketId), req.body.items, 'ids');
 		return s.takeItems(req.body.casketId, ids, req.body.casketName);
@@ -278,7 +293,6 @@ function start({ dataDir, secretBox, exportDir }) {
 	app.get('/api/rules/plan', handle(req => pick(req).planRules(mgr.settings().rules)));
 	app.post('/api/rules/apply', handle(async req => {
 		const s = pick(req);
-		s.turbo = Boolean(mgr.settings().turbo);
 		const plan = await s.applyRules(mgr.settings().rules);
 		mgr.history({ login: s.login, action: 'rules', items: plan.total, caskets: plan.steps.length });
 		return plan;
@@ -375,6 +389,9 @@ function start({ dataDir, secretBox, exportDir }) {
 
 	// ---------------------------------------------------------------- трейд-ап (контракт обмена)
 	app.get('/api/tradeup/groups', handle(req => pick(req).tradeUpGroups(req.query.caskets === '1')));
+	app.post('/api/tradeup/preview', handle(req => pick(req).tradeUpPreview(req.body.itemIds || [])));
+	// Ссылка «Осмотреть» (wait=1 — подождать появления нового предмета в веб-инвентаре, например после контракта)
+	app.get('/api/inspect', handle(async req => ({ link: await require('./core/workshop').inspectLink(pick(req), String(req.query.id || ''), req.query.wait === '1') })));
 	app.post('/api/tradeup/craft', handle(async req => {
 		const s = pick(req);
 		const result = await s.craftTradeUp(req.body.itemIds || []);

@@ -79,6 +79,9 @@ const META_SOURCES = {
 	images: 'https://raw.githubusercontent.com/ByMykel/counter-strike-image-tracker/main/static/images.json',
 };
 const META_FILE = 'store_meta.json';
+// Версия алгоритма сборки: кэш, собранный старым кодом (например, с «конвертами» вместо картинок),
+// игнорируется и пересобирается сразу, не дожидаясь суточного обновления.
+const META_VERSION = 4;
 
 function getText(url, timeout = 60000) {
 	return new Promise((resolve, reject) => {
@@ -145,6 +148,10 @@ function buildStoreMeta(itemsGameText, englishText, imagesMap) {
 	const kits = byName('sticker_kits'), music = byName('music_definitions'), charms = byName('keychain_definitions');
 	const lootLists = ig.client_loot_lists || {};
 	const img = path => path ? (imagesMap[path] || imagesMap[String(path).toLowerCase()] || null) : null;
+	// Предмет по внутреннему имени (crate_sprays_illuminate1 и т.п.) -> его собственная картинка.
+	const itemsByName = {};
+	for (const d of Object.values(items)) if (d && typeof d === 'object' && d.name) itemsByName[d.name] = d;
+	const fromItem = name => { const d = itemsByName[name]; const p = d && field(d, 'image_inventory'); return p && !/^econ\/coupon\//.test(p) ? img(p) : null; };
 	// Купон капсулы/бокса -> иконка самого контейнера (econ/weapon_cases/crate_…) по ключевым словам названия.
 	const cases = Object.keys(imagesMap).filter(k => k.startsWith('econ/weapon_cases/'));
 	const STOP = new Set(['sticker', 'capsule', 'pack', 'crate', 'coupon', 'box']);
@@ -161,7 +168,7 @@ function buildStoreMeta(itemsGameText, englishText, imagesMap) {
 		if (!list || depth > 3) return null;
 		for (const key of Object.keys(list)) {
 			const m = key.match(/^\[(.+?)\](\w+)$/);
-			if (!m) { const nested = fromLoot(key, depth + 1); if (nested) return nested; continue; }
+			if (!m) { const nested = fromItem(key) || fromLoot(key, depth + 1); if (nested) return nested; continue; }
 			const [, name, kind] = m;
 			let found = null;
 			if (kind === 'musickit' && music[name]) found = img(music[name].image_inventory);
@@ -189,13 +196,50 @@ function buildStoreMeta(itemsGameText, englishText, imagesMap) {
 		if (!image || generic) {
 			const loot = field(def, 'loot_list_name');
 			const coupon = String(def.name || '').match(/^coupon - (.+)$/);
-			const real = (loot ? fromLoot(loot) : null) || (coupon ? fromCrateName(coupon[1]) : null);
+			const real = (loot ? fromLoot(loot) : null) || (coupon ? fromItem(coupon[1]) || fromCrateName(coupon[1]) : null);
 			if (real) image = real;
 			else { envelope = true; image = image || img(invImg); }
 		}
 		if (name || image) defs[id] = envelope ? { name, image, generic: true } : { name, image };
 	}
-	return { built: Date.now(), links, defs, armory: buildArmory(ig, tr, links, defs, imagesMap) };
+	return { v: META_VERSION, built: Date.now(), links, defs, armory: buildArmory(ig, tr, links, defs, imagesMap), tradeup: buildTradeUp(ig, tr) };
+}
+
+// Контракты обмена: для каждого скина ("def:paint") — коллекция, редкость в ней и диапазон float.
+// Коллекции — item_sets; редкость — из списков client_loot_lists вида <набор>_<редкость>;
+// диапазон float — wear_remap_min/max набора краски (по умолчанию — как у paint kit 0).
+const RARITY_BY_SUFFIX = { common: 1, uncommon: 2, rare: 3, mythical: 4, legendary: 5, ancient: 6 };
+function buildTradeUp(ig, tr) {
+	const weaponDef = {};
+	for (const [id, d] of Object.entries(ig.items || {})) if (/^\d+$/.test(id) && d && /^weapon_/.test(d.name || '')) weaponDef[d.name] = Number(id);
+	const kits = ig.paint_kits || {};
+	const base = kits['0'] || {};
+	const kitByName = {};
+	for (const [id, k] of Object.entries(kits)) {
+		if (!/^\d+$/.test(id) || !k || !k.name) continue;
+		kitByName[k.name] = { id: Number(id), min: Number(k.wear_remap_min ?? base.wear_remap_min ?? 0.06), max: Number(k.wear_remap_max ?? base.wear_remap_max ?? 0.8) };
+	}
+	const rarity = {};
+	for (const [list, entries] of Object.entries(ig.client_loot_lists || {})) {
+		const m = list.match(/_(common|uncommon|rare|mythical|legendary|ancient)$/);
+		if (!m || !entries || typeof entries !== 'object') continue;
+		for (const key of Object.keys(entries)) if (key.startsWith('[') && !(key in rarity)) rarity[key] = RARITY_BY_SUFFIX[m[1]];
+	}
+	const sets = [], skins = {};
+	for (const [setKey, set] of Object.entries(ig.item_sets || {})) {
+		if (!set || !set.items || typeof set.items !== 'object') continue;
+		let idx = -1;
+		for (const key of Object.keys(set.items)) {
+			const m = key.match(/^\[(.+)\](weapon_\w+)$/);
+			const kit = m && kitByName[m[1]], def = m && weaponDef[m[2]];
+			if (!kit || def == null || !rarity[key]) continue;
+			const k = `${def}:${kit.id}`;
+			if (skins[k]) continue;
+			if (idx < 0) { idx = sets.length; sets.push(tr(set.name) || setKey); }
+			skins[k] = [idx, rarity[key], kit.min, kit.max];
+		}
+	}
+	return { sets, skins };
 }
 
 // Armory (магазин за звёзды): последний сезон с redeemable_goods = xpshop. redeemId — порядковый номер
@@ -220,16 +264,24 @@ function buildArmory(ig, tr, links, defs, imagesMap) {
 
 let _meta = null;
 function storeMeta() {
-	if (!_meta) _meta = loadMap(META_FILE);
+	if (!_meta) {
+		// кэш от старой версии сборки не берём — встроенная копия свежее, а кэш пересоберётся в фоне
+		const cached = cacheDir() ? readJson(path.join(cacheDir(), META_FILE)) : null;
+		_meta = cached && cached.v === META_VERSION ? cached : readJson(path.join(BUNDLED, META_FILE)) || {};
+	}
 	return _meta;
 }
+function readJson(file) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { return null; } }
 
 // Обновить метаданные магазина (раз в сутки; при ошибке остаётся прежний кэш или комплект).
 async function refreshStoreMeta(force = false) {
 	const dir = cacheDir();
 	if (!dir) return { updated: false };
 	const file = path.join(dir, META_FILE);
-	try { if (!force && fs.existsSync(file) && Date.now() - fs.statSync(file).mtimeMs < 24 * 3600e3) return { updated: false, fresh: true }; } catch (e) { /* ignore */ }
+	try {
+		const old = !force && fs.existsSync(file) && Date.now() - fs.statSync(file).mtimeMs < 24 * 3600e3 ? readJson(file) : null;
+		if (old && old.v === META_VERSION) return { updated: false, fresh: true };
+	} catch (e) { /* ignore */ }
 	const [ig, en, im] = await Promise.all([getText(META_SOURCES.itemsGame), getText(META_SOURCES.english), getText(META_SOURCES.images)]);
 	const meta = buildStoreMeta(decodeText(ig), decodeText(en), JSON.parse(decodeText(im)));
 	if (Object.keys(meta.links).length < 1000) throw new Error('файлы игры неполные — оставляем прежние данные');
@@ -251,4 +303,4 @@ function loadSupport() {
 	return out;
 }
 
-module.exports = { loadSupport, loadMap, refresh, BUNDLED, FILES, storeMeta, refreshStoreMeta, buildStoreMeta, META_SOURCES };
+module.exports = { loadSupport, loadMap, refresh, BUNDLED, FILES, storeMeta, refreshStoreMeta, buildStoreMeta, META_SOURCES, META_VERSION };
