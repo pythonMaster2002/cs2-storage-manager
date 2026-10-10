@@ -91,6 +91,8 @@
 - **macOS** («приложение повреждено» / «не удаётся проверить»): правый клик по приложению → **Открыть** или в Терминале `xattr -cr "/Applications/Caskit.app"`.
 - **Linux AppImage**: `chmod +x Caskit-*.AppImage`, затем запустить.
 
+**Проверка VirusTotal** (v1.0.0): [установщик — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [portable — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).
+
 ### Удаление
 
 - **Windows (установщик)**: Параметры → Приложения → **Caskit** → Удалить. **Portable**: просто удалите `.exe`.
@@ -140,7 +142,7 @@ npm run build:mac      # dmg + zip (только на macOS)
 
 ## Политика подписи кода
 
-Сборки для Windows собираются из этого репозитория в GitHub Actions; подпись — через SignPath (бесплатно для открытых проектов, сертификат SignPath Foundation). Подробности — в разделе [Code signing policy](../README.md#code-signing-policy) (англ.).
+Сборки для Windows собираются из этого репозитория в GitHub Actions. Подпись планируется через SignPath Foundation (бесплатно для открытых проектов); первая заявка пока не одобрена — до одобрения сборки не подписаны. Подробности — в разделе [Code signing policy](../README.md#code-signing-policy) (англ.).
 
 ## Лицензия
 

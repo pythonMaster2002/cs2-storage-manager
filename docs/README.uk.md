@@ -91,6 +91,8 @@
 - **macOS** («програму пошкоджено» / «неможливо перевірити»): правий клік по програмі → **Відкрити** або в Терміналі `xattr -cr "/Applications/Caskit.app"`.
 - **Linux AppImage**: `chmod +x Caskit-*.AppImage`, потім запустити.
 
+**Перевірка VirusTotal** (v1.0.0): [інсталятор — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [portable — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).
+
 ### Видалення
 
 - **Windows (інсталятор)**: Параметри → Програми → **Caskit** → Видалити. **Portable**: просто видаліть `.exe`.
@@ -140,7 +142,7 @@ npm run build:mac      # dmg + zip (лише на macOS)
 
 ## Політика підпису коду
 
-Збірки для Windows збираються з цього репозиторію в GitHub Actions; підпис — через SignPath (безкоштовно для відкритих проєктів, сертифікат SignPath Foundation). Докладніше — у розділі [Code signing policy](../README.md#code-signing-policy) (англ.).
+Збірки для Windows збираються з цього репозиторію в GitHub Actions. Підпис планується через SignPath Foundation (безкоштовно для відкритих проєктів); першу заявку поки не схвалено — до схвалення збірки не підписані. Докладніше — у розділі [Code signing policy](../README.md#code-signing-policy) (англ.).
 
 ## Ліцензія
 

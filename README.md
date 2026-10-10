@@ -91,6 +91,8 @@ Get the latest version on the **[Releases](https://github.com/pythonMaster2002/c
 - **macOS** (“app is damaged” / “can't be checked”): right-click the app → **Open**, or run `xattr -cr "/Applications/Caskit.app"` in Terminal.
 - **Linux AppImage**: `chmod +x Caskit-*.AppImage`, then run it.
 
+**VirusTotal scan** (v1.0.0): [installer — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [portable — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).
+
 ### Uninstall
 
 - **Windows (installer)**: Settings → Apps → **Caskit** → Uninstall. **Portable**: just delete the `.exe`.
@@ -141,7 +143,7 @@ npm run build:mac      # dmg + zip (macOS only)
 ## Code signing policy
 
 Windows releases are built from this repository by [GitHub Actions](.github/workflows/release.yml) and are intended to be signed through SignPath. Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
-*Status: the application is in progress — until it is approved, releases are unsigned.*
+*Status: our first application was not approved yet (the project is new), so releases are currently unsigned. We will reapply.*
 
 - Committers and reviewers: [@pythonMaster2002](https://github.com/pythonMaster2002)
 - Approvers: [@pythonMaster2002](https://github.com/pythonMaster2002)

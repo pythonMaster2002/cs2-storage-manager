@@ -52,6 +52,7 @@ T = {
  first_win='**Windows** («Windows защитила ваш компьютер»): **Подробнее → Выполнить в любом случае**.',
  first_mac='**macOS** («приложение повреждено» / «не удаётся проверить»): правый клик по приложению → **Открыть** или в Терминале `xattr -cr "/Applications/Caskit.app"`.',
  first_lin='**Linux AppImage**: `chmod +x Caskit-*.AppImage`, затем запустить.',
+ vt='**Проверка VirusTotal** (v1.0.0): [установщик — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [portable — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).',
  sec='Безопасность и приватность',
  sec_1='Caskit общается только со Steam (и Game Coordinator CS2). Пароль не сохраняется; refresh token и секреты maFile хранятся у вас на диске **зашифрованными** средствами системы (Windows DPAPI / связка ключей macOS / libsecret в Linux).',
  sec_2='Если у аккаунта задан прокси, через него идёт *весь* трафик аккаунта — веб-запросы, QR-код, аватар. Если прокси не работает, вход прерывается, а не идёт напрямую.',
@@ -113,6 +114,7 @@ T = {
  first_win='**Windows** («Windows захистила ваш ПК»): **Докладніше → Усе одно запустити**.',
  first_mac='**macOS** («програму пошкоджено» / «неможливо перевірити»): правий клік по програмі → **Відкрити** або в Терміналі `xattr -cr "/Applications/Caskit.app"`.',
  first_lin='**Linux AppImage**: `chmod +x Caskit-*.AppImage`, потім запустити.',
+ vt='**Перевірка VirusTotal** (v1.0.0): [інсталятор — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [portable — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).',
  sec='Безпека й приватність',
  sec_1='Caskit спілкується лише зі Steam (і Game Coordinator CS2). Пароль не зберігається; refresh token і секрети maFile зберігаються на вашому диску **зашифрованими** засобами системи (Windows DPAPI / зв’язка ключів macOS / libsecret у Linux).',
  sec_2='Якщо в акаунта задано проксі, через нього йде *весь* трафік акаунта — веб-запити, QR-код, аватар. Якщо проксі не працює, вхід переривається, а не йде напряму.',
@@ -174,6 +176,7 @@ T = {
  first_win='**Windows** („Der Computer wurde durch Windows geschützt“): **Weitere Informationen → Trotzdem ausführen**.',
  first_mac='**macOS** („App ist beschädigt“ / „kann nicht überprüft werden“): Rechtsklick auf die App → **Öffnen** oder im Terminal `xattr -cr "/Applications/Caskit.app"`.',
  first_lin='**Linux AppImage**: `chmod +x Caskit-*.AppImage`, dann starten.',
+ vt='**VirusTotal-Scan** (v1.0.0): [Installer – 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [Portable – 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).',
  sec='Sicherheit und Privatsphäre',
  sec_1='Caskit spricht nur mit Steam (und dem CS2 Game Coordinator). Dein Passwort wird nie gespeichert; Refresh-Token und maFile-Geheimnisse liegen **verschlüsselt** durch das System auf deiner Festplatte (Windows DPAPI / macOS-Schlüsselbund / libsecret unter Linux).',
  sec_2='Hat ein Konto einen Proxy, läuft *der gesamte* Verkehr darüber — Webanfragen, QR-Code, Avatar. Fällt der Proxy aus, bricht die Anmeldung ab, statt direkt zu verbinden.',
@@ -235,6 +238,7 @@ T = {
  first_win='**Windows** («Windows protegió su PC»): **Más información → Ejecutar de todas formas**.',
  first_mac='**macOS** («la app está dañada» / «no se puede comprobar»): clic derecho en la app → **Abrir**, o en Terminal `xattr -cr "/Applications/Caskit.app"`.',
  first_lin='**Linux AppImage**: `chmod +x Caskit-*.AppImage` y ejecútalo.',
+ vt='**Análisis de VirusTotal** (v1.0.0): [instalador — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [portable — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).',
  sec='Seguridad y privacidad',
  sec_1='Caskit solo habla con Steam (y con el Game Coordinator de CS2). Tu contraseña nunca se guarda; el refresh token y los secretos del maFile se guardan en tu disco **cifrados** por el sistema (Windows DPAPI / Llavero de macOS / libsecret en Linux).',
  sec_2='Si una cuenta tiene proxy, *todo* su tráfico pasa por él: peticiones web, código QR, avatar. Si el proxy falla, el inicio de sesión se detiene en lugar de ir directo.',
@@ -296,6 +300,7 @@ T = {
  first_win='**Windows** («O Windows protegeu o computador»): **Mais informações → Executar assim mesmo**.',
  first_mac='**macOS** («o app está danificado» / «não é possível verificar»): clique com o botão direito no app → **Abrir**, ou no Terminal `xattr -cr "/Applications/Caskit.app"`.',
  first_lin='**Linux AppImage**: `chmod +x Caskit-*.AppImage` e execute.',
+ vt='**Verificação no VirusTotal** (v1.0.0): [instalador — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [portable — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).',
  sec='Segurança e privacidade',
  sec_1='O Caskit fala apenas com a Steam (e com o Game Coordinator do CS2). Sua senha nunca é salva; o refresh token e os segredos do maFile ficam no seu disco **criptografados** pelo sistema (Windows DPAPI / Chaves do macOS / libsecret no Linux).',
  sec_2='Se uma conta tem proxy, *todo* o tráfego dela passa por ele — requisições web, QR code, avatar. Se o proxy cair, o login é interrompido em vez de ir direto.',
@@ -357,6 +362,7 @@ T = {
  first_win='**Windows** (« Windows a protégé votre ordinateur ») : **Informations complémentaires → Exécuter quand même**.',
  first_mac='**macOS** (« l’app est endommagée » / « impossible de vérifier ») : clic droit sur l’app → **Ouvrir**, ou dans le Terminal `xattr -cr "/Applications/Caskit.app"`.',
  first_lin='**Linux AppImage** : `chmod +x Caskit-*.AppImage`, puis lancez-le.',
+ vt='**Analyse VirusTotal** (v1.0.0) : [installateur — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [portable — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).',
  sec='Sécurité et confidentialité',
  sec_1='Caskit ne parle qu’à Steam (et au Game Coordinator de CS2). Votre mot de passe n’est jamais enregistré ; le refresh token et les secrets maFile sont stockés sur votre disque, **chiffrés** par le système (Windows DPAPI / Trousseau macOS / libsecret sous Linux).',
  sec_2='Si un compte a un proxy, *tout* son trafic passe par lui — requêtes web, QR code, avatar. Si le proxy est en panne, la connexion s’arrête au lieu de passer en direct.',
@@ -418,6 +424,7 @@ T = {
  first_win='**Windows** („System Windows ochronił ten komputer”): **Więcej informacji → Uruchom mimo to**.',
  first_mac='**macOS** („aplikacja jest uszkodzona” / „nie można zweryfikować”): prawy klik na aplikację → **Otwórz** albo w Terminalu `xattr -cr "/Applications/Caskit.app"`.',
  first_lin='**Linux AppImage**: `chmod +x Caskit-*.AppImage`, potem uruchom.',
+ vt='**Skan VirusTotal** (v1.0.0): [instalator — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [portable — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).',
  sec='Bezpieczeństwo i prywatność',
  sec_1='Caskit łączy się tylko ze Steam (i Game Coordinatorem CS2). Hasło nigdy nie jest zapisywane; refresh token i sekrety maFile są przechowywane na twoim dysku **zaszyfrowane** przez system (Windows DPAPI / pęk kluczy macOS / libsecret w Linuksie).',
  sec_2='Jeśli konto ma proxy, przez nie idzie *cały* ruch konta — zapytania WWW, kod QR, awatar. Gdy proxy nie działa, logowanie zostaje przerwane zamiast iść bezpośrednio.',
@@ -479,6 +486,7 @@ T = {
  first_win='**Windows** («Windows bilgisayarınızı korudu»): **Ek bilgi → Yine de çalıştır**.',
  first_mac='**macOS** («uygulama hasarlı» / «doğrulanamıyor»): uygulamaya sağ tıklayın → **Aç** ya da Terminal’de `xattr -cr "/Applications/Caskit.app"`.',
  first_lin='**Linux AppImage**: `chmod +x Caskit-*.AppImage`, ardından çalıştırın.',
+ vt='**VirusTotal taraması** (v1.0.0): [yükleyici — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [portable — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).',
  sec='Güvenlik ve gizlilik',
  sec_1='Caskit yalnızca Steam (ve CS2 Game Coordinator) ile konuşur. Şifreniz asla kaydedilmez; refresh token ve maFile sırları diskinizde sistem tarafından **şifrelenmiş** olarak tutulur (Windows DPAPI / macOS Anahtar Zinciri / Linux’ta libsecret).',
  sec_2='Bir hesabın proxy’si varsa, hesabın *tüm* trafiği ondan geçer — web istekleri, QR kod, avatar. Proxy çalışmıyorsa giriş doğrudan bağlanmak yerine durur.',
@@ -540,6 +548,7 @@ T = {
  first_win='**Windows**（「Windows 已保护你的电脑」）：点击 **更多信息 → 仍要运行**。',
  first_mac='**macOS**（「应用已损坏」/「无法验证」）：右键点击应用 → **打开**，或在终端执行 `xattr -cr "/Applications/Caskit.app"`。',
  first_lin='**Linux AppImage**：`chmod +x Caskit-*.AppImage`，然后运行。',
+ vt='**VirusTotal 扫描**（v1.0.0）：[安装版 — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22)，[便携版 — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9)。',
  sec='安全与隐私',
  sec_1='Caskit 只与 Steam（以及 CS2 游戏协调器）通信。密码从不保存；refresh token 和 maFile 密钥由系统**加密**后保存在你的磁盘上（Windows DPAPI / macOS 钥匙串 / Linux libsecret）。',
  sec_2='如果账户设置了代理，该账户的*全部*流量都经过代理——网页请求、二维码、头像。代理不可用时，登录会中止，而不会直接连接。',
@@ -571,7 +580,7 @@ EXTRA = {
  un_data="Сохранённые входы и настройки остаются в папке данных (см. вопросы ниже) — удалите и её, чтобы стереть всё.",
  priv="Без аналитики и телеметрии. Полный список сетевых подключений — в **[политике конфиденциальности](../PRIVACY.md)** (англ.).",
  csp="Политика подписи кода",
- csp_1="Сборки для Windows собираются из этого репозитория в GitHub Actions; подпись — через SignPath (бесплатно для открытых проектов, сертификат SignPath Foundation). Подробности — в разделе [Code signing policy](../README.md#code-signing-policy) (англ.).",
+ csp_1="Сборки для Windows собираются из этого репозитория в GitHub Actions. Подпись планируется через SignPath Foundation (бесплатно для открытых проектов); первая заявка пока не одобрена — до одобрения сборки не подписаны. Подробности — в разделе [Code signing policy](../README.md#code-signing-policy) (англ.).",
 ),
 'uk': dict(
  un="Видалення",
@@ -581,7 +590,7 @@ EXTRA = {
  un_data="Збережені входи й налаштування залишаються в папці даних (див. питання нижче) — видаліть і її, щоб стерти все.",
  priv="Без аналітики й телеметрії. Повний список мережевих підключень — у **[політиці конфіденційності](../PRIVACY.md)** (англ.).",
  csp="Політика підпису коду",
- csp_1="Збірки для Windows збираються з цього репозиторію в GitHub Actions; підпис — через SignPath (безкоштовно для відкритих проєктів, сертифікат SignPath Foundation). Докладніше — у розділі [Code signing policy](../README.md#code-signing-policy) (англ.).",
+ csp_1="Збірки для Windows збираються з цього репозиторію в GitHub Actions. Підпис планується через SignPath Foundation (безкоштовно для відкритих проєктів); першу заявку поки не схвалено — до схвалення збірки не підписані. Докладніше — у розділі [Code signing policy](../README.md#code-signing-policy) (англ.).",
 ),
 'de': dict(
  un="Deinstallieren",
@@ -591,7 +600,7 @@ EXTRA = {
  un_data="Gespeicherte Anmeldungen und Einstellungen bleiben im Datenordner (siehe FAQ) — lösche ihn ebenfalls, um alles zu entfernen.",
  priv="Keine Analyse, keine Telemetrie. Alle Netzwerkverbindungen stehen in der **[Datenschutzerklärung](../PRIVACY.md)** (Englisch).",
  csp="Code-Signing-Richtlinie",
- csp_1="Windows-Builds werden per GitHub Actions aus diesem Repository erstellt und über SignPath signiert (kostenlos für Open Source, Zertifikat der SignPath Foundation). Details: [Code signing policy](../README.md#code-signing-policy) (Englisch).",
+ csp_1="Windows-Builds werden per GitHub Actions aus diesem Repository erstellt. Die Signierung ist über die SignPath Foundation geplant (kostenlos für Open Source); der erste Antrag wurde noch nicht genehmigt – bis dahin sind die Builds unsigniert. Details: [Code signing policy](../README.md#code-signing-policy) (Englisch).",
 ),
 'es': dict(
  un="Desinstalar",
@@ -601,7 +610,7 @@ EXTRA = {
  un_data="Los inicios de sesión guardados y los ajustes quedan en la carpeta de datos (ver preguntas frecuentes); bórrala también para eliminarlo todo.",
  priv="Sin analíticas ni telemetría. Lista completa de conexiones de red en la **[política de privacidad](../PRIVACY.md)** (en inglés).",
  csp="Política de firma de código",
- csp_1="Las versiones de Windows se compilan desde este repositorio con GitHub Actions y se firman mediante SignPath (gratis para código abierto, certificado de SignPath Foundation). Detalles: [Code signing policy](../README.md#code-signing-policy) (en inglés).",
+ csp_1="Las versiones de Windows se compilan desde este repositorio con GitHub Actions. La firma está prevista mediante SignPath Foundation (gratis para código abierto); la primera solicitud aún no ha sido aprobada, así que por ahora las versiones no están firmadas. Detalles: [Code signing policy](../README.md#code-signing-policy) (en inglés).",
 ),
 'pt': dict(
  un="Desinstalar",
@@ -611,7 +620,7 @@ EXTRA = {
  un_data="Os logins salvos e as configurações ficam na pasta de dados (veja as perguntas frequentes); apague-a também para remover tudo.",
  priv="Sem análises nem telemetria. Lista completa de conexões de rede na **[política de privacidade](../PRIVACY.md)** (em inglês).",
  csp="Política de assinatura de código",
- csp_1="As versões para Windows são compiladas a partir deste repositório no GitHub Actions e assinadas via SignPath (gratuito para código aberto, certificado da SignPath Foundation). Detalhes: [Code signing policy](../README.md#code-signing-policy) (em inglês).",
+ csp_1="As versões para Windows são compiladas a partir deste repositório no GitHub Actions. A assinatura está prevista via SignPath Foundation (gratuito para código aberto); o primeiro pedido ainda não foi aprovado, então por enquanto as versões não são assinadas. Detalhes: [Code signing policy](../README.md#code-signing-policy) (em inglês).",
 ),
 'fr': dict(
  un="Désinstaller",
@@ -621,7 +630,7 @@ EXTRA = {
  un_data="Les connexions enregistrées et les réglages restent dans le dossier de données (voir FAQ) ; supprimez-le aussi pour tout effacer.",
  priv="Pas d’analytique ni de télémétrie. Liste complète des connexions réseau dans la **[politique de confidentialité](../PRIVACY.md)** (en anglais).",
  csp="Politique de signature du code",
- csp_1="Les versions Windows sont compilées depuis ce dépôt par GitHub Actions et signées via SignPath (gratuit pour l’open source, certificat de SignPath Foundation). Détails : [Code signing policy](../README.md#code-signing-policy) (en anglais).",
+ csp_1="Les versions Windows sont compilées depuis ce dépôt par GitHub Actions. La signature est prévue via SignPath Foundation (gratuit pour l’open source) ; la première demande n’a pas encore été acceptée, donc les versions ne sont pas signées pour l’instant. Détails : [Code signing policy](../README.md#code-signing-policy) (en anglais).",
 ),
 'pl': dict(
  un="Odinstalowanie",
@@ -631,7 +640,7 @@ EXTRA = {
  un_data="Zapisane logowania i ustawienia zostają w folderze danych (zobacz FAQ) — usuń go też, aby skasować wszystko.",
  priv="Bez analityki i telemetrii. Pełna lista połączeń sieciowych w **[polityce prywatności](../PRIVACY.md)** (po angielsku).",
  csp="Zasady podpisywania kodu",
- csp_1="Wersje dla Windows są budowane z tego repozytorium w GitHub Actions i podpisywane przez SignPath (bezpłatnie dla open source, certyfikat SignPath Foundation). Szczegóły: [Code signing policy](../README.md#code-signing-policy) (po angielsku).",
+ csp_1="Wersje dla Windows są budowane z tego repozytorium w GitHub Actions. Podpis jest planowany przez SignPath Foundation (bezpłatnie dla open source); pierwszy wniosek nie został jeszcze zatwierdzony, więc na razie wersje nie są podpisane. Szczegóły: [Code signing policy](../README.md#code-signing-policy) (po angielsku).",
 ),
 'tr': dict(
  un="Kaldırma",
@@ -641,7 +650,7 @@ EXTRA = {
  un_data="Kayıtlı girişler ve ayarlar veri klasöründe kalır (SSS’ye bakın) — her şeyi silmek için onu da silin.",
  priv="Analitik ve telemetri yok. Tüm ağ bağlantılarının listesi **[gizlilik politikasında](../PRIVACY.md)** (İngilizce).",
  csp="Kod imzalama politikası",
- csp_1="Windows sürümleri bu depodan GitHub Actions ile derlenir ve SignPath üzerinden imzalanır (açık kaynak için ücretsiz, sertifika SignPath Foundation’a ait). Ayrıntılar: [Code signing policy](../README.md#code-signing-policy) (İngilizce).",
+ csp_1="Windows sürümleri bu depodan GitHub Actions ile derlenir. İmzalama SignPath Foundation üzerinden planlanıyor (açık kaynak için ücretsiz); ilk başvuru henüz onaylanmadı, bu yüzden şimdilik sürümler imzasız. Ayrıntılar: [Code signing policy](../README.md#code-signing-policy) (İngilizce).",
 ),
 'zh': dict(
  un="卸载",
@@ -651,7 +660,7 @@ EXTRA = {
  un_data="已保存的登录信息和设置保留在数据文件夹中（见常见问题）——如需全部清除，请一并删除。",
  priv="无分析、无遥测。完整的网络连接列表见 **[隐私政策](../PRIVACY.md)**（英文）。",
  csp="代码签名政策",
- csp_1="Windows 版本由 GitHub Actions 从本仓库构建，并通过 SignPath 签名（开源项目免费，证书属于 SignPath Foundation）。详情见 [Code signing policy](../README.md#code-signing-policy)（英文）。",
+ csp_1="Windows 版本由 GitHub Actions 从本仓库构建。计划通过 SignPath Foundation 签名（开源项目免费）；首次申请尚未获批，在此之前发布版本未签名。详情见 [Code signing policy](../README.md#code-signing-policy)（英文）。",
 ),
 }
 # Блок для пользователей Casemove (под демо-роликом)
@@ -753,6 +762,8 @@ TEMPLATE = '''<p align="center"><img src="../build/icon.png" width="120" alt="Ca
 - {first_win}
 - {first_mac}
 - {first_lin}
+
+{vt}
 
 ### {un}
 

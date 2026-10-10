@@ -91,6 +91,8 @@ En son sürüm **[Releases](https://github.com/pythonMaster2002/cs2-storage-mana
 - **macOS** («uygulama hasarlı» / «doğrulanamıyor»): uygulamaya sağ tıklayın → **Aç** ya da Terminal’de `xattr -cr "/Applications/Caskit.app"`.
 - **Linux AppImage**: `chmod +x Caskit-*.AppImage`, ardından çalıştırın.
 
+**VirusTotal taraması** (v1.0.0): [yükleyici — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [portable — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).
+
 ### Kaldırma
 
 - **Windows (kurulum)**: Ayarlar → Uygulamalar → **Caskit** → Kaldır. **Portable**: `.exe` dosyasını silmeniz yeterli.
@@ -140,7 +142,7 @@ npm run build:mac      # dmg + zip (yalnızca macOS’ta)
 
 ## Kod imzalama politikası
 
-Windows sürümleri bu depodan GitHub Actions ile derlenir ve SignPath üzerinden imzalanır (açık kaynak için ücretsiz, sertifika SignPath Foundation’a ait). Ayrıntılar: [Code signing policy](../README.md#code-signing-policy) (İngilizce).
+Windows sürümleri bu depodan GitHub Actions ile derlenir. İmzalama SignPath Foundation üzerinden planlanıyor (açık kaynak için ücretsiz); ilk başvuru henüz onaylanmadı, bu yüzden şimdilik sürümler imzasız. Ayrıntılar: [Code signing policy](../README.md#code-signing-policy) (İngilizce).
 
 ## Lisans
 

@@ -91,6 +91,8 @@
 - **macOS**（「应用已损坏」/「无法验证」）：右键点击应用 → **打开**，或在终端执行 `xattr -cr "/Applications/Caskit.app"`。
 - **Linux AppImage**：`chmod +x Caskit-*.AppImage`，然后运行。
 
+**VirusTotal 扫描**（v1.0.0）：[安装版 — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22)，[便携版 — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9)。
+
 ### 卸载
 
 - **Windows（安装版）**：设置 → 应用 → **Caskit** → 卸载。**便携版**：直接删除 `.exe` 即可。
@@ -140,7 +142,7 @@ npm run build:mac      # dmg + zip（仅限 macOS）
 
 ## 代码签名政策
 
-Windows 版本由 GitHub Actions 从本仓库构建，并通过 SignPath 签名（开源项目免费，证书属于 SignPath Foundation）。详情见 [Code signing policy](../README.md#code-signing-policy)（英文）。
+Windows 版本由 GitHub Actions 从本仓库构建。计划通过 SignPath Foundation 签名（开源项目免费）；首次申请尚未获批，在此之前发布版本未签名。详情见 [Code signing policy](../README.md#code-signing-policy)（英文）。
 
 ## 许可证
 

@@ -91,6 +91,8 @@ La dernière version est sur la page **[Releases](https://github.com/pythonMaste
 - **macOS** (« l’app est endommagée » / « impossible de vérifier ») : clic droit sur l’app → **Ouvrir**, ou dans le Terminal `xattr -cr "/Applications/Caskit.app"`.
 - **Linux AppImage** : `chmod +x Caskit-*.AppImage`, puis lancez-le.
 
+**Analyse VirusTotal** (v1.0.0) : [installateur — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [portable — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).
+
 ### Désinstaller
 
 - **Windows (installateur)** : Paramètres → Applications → **Caskit** → Désinstaller. **Portable** : supprimez simplement le `.exe`.
@@ -140,7 +142,7 @@ npm run build:mac      # dmg + zip (macOS uniquement)
 
 ## Politique de signature du code
 
-Les versions Windows sont compilées depuis ce dépôt par GitHub Actions et signées via SignPath (gratuit pour l’open source, certificat de SignPath Foundation). Détails : [Code signing policy](../README.md#code-signing-policy) (en anglais).
+Les versions Windows sont compilées depuis ce dépôt par GitHub Actions. La signature est prévue via SignPath Foundation (gratuit pour l’open source) ; la première demande n’a pas encore été acceptée, donc les versions ne sont pas signées pour l’instant. Détails : [Code signing policy](../README.md#code-signing-policy) (en anglais).
 
 ## Licence
 

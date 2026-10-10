@@ -91,6 +91,8 @@ Die neueste Version gibt es unter **[Releases](https://github.com/pythonMaster20
 - **macOS** („App ist beschädigt“ / „kann nicht überprüft werden“): Rechtsklick auf die App → **Öffnen** oder im Terminal `xattr -cr "/Applications/Caskit.app"`.
 - **Linux AppImage**: `chmod +x Caskit-*.AppImage`, dann starten.
 
+**VirusTotal-Scan** (v1.0.0): [Installer – 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [Portable – 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).
+
 ### Deinstallieren
 
 - **Windows (Installer)**: Einstellungen → Apps → **Caskit** → Deinstallieren. **Portable**: einfach die `.exe` löschen.
@@ -140,7 +142,7 @@ npm run build:mac      # dmg + zip (nur unter macOS)
 
 ## Code-Signing-Richtlinie
 
-Windows-Builds werden per GitHub Actions aus diesem Repository erstellt und über SignPath signiert (kostenlos für Open Source, Zertifikat der SignPath Foundation). Details: [Code signing policy](../README.md#code-signing-policy) (Englisch).
+Windows-Builds werden per GitHub Actions aus diesem Repository erstellt. Die Signierung ist über die SignPath Foundation geplant (kostenlos für Open Source); der erste Antrag wurde noch nicht genehmigt – bis dahin sind die Builds unsigniert. Details: [Code signing policy](../README.md#code-signing-policy) (Englisch).
 
 ## Lizenz
 

@@ -91,6 +91,8 @@ Najnowsza wersja jest na stronie **[Releases](https://github.com/pythonMaster200
 - **macOS** („aplikacja jest uszkodzona” / „nie można zweryfikować”): prawy klik na aplikację → **Otwórz** albo w Terminalu `xattr -cr "/Applications/Caskit.app"`.
 - **Linux AppImage**: `chmod +x Caskit-*.AppImage`, potem uruchom.
 
+**Skan VirusTotal** (v1.0.0): [instalator — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [portable — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).
+
 ### Odinstalowanie
 
 - **Windows (instalator)**: Ustawienia → Aplikacje → **Caskit** → Odinstaluj. **Portable**: po prostu usuń `.exe`.
@@ -140,7 +142,7 @@ npm run build:mac      # dmg + zip (tylko na macOS)
 
 ## Zasady podpisywania kodu
 
-Wersje dla Windows są budowane z tego repozytorium w GitHub Actions i podpisywane przez SignPath (bezpłatnie dla open source, certyfikat SignPath Foundation). Szczegóły: [Code signing policy](../README.md#code-signing-policy) (po angielsku).
+Wersje dla Windows są budowane z tego repozytorium w GitHub Actions. Podpis jest planowany przez SignPath Foundation (bezpłatnie dla open source); pierwszy wniosek nie został jeszcze zatwierdzony, więc na razie wersje nie są podpisane. Szczegóły: [Code signing policy](../README.md#code-signing-policy) (po angielsku).
 
 ## Licencja
 
