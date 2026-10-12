@@ -24,6 +24,18 @@ if (!app.requestSingleInstanceLock()) app.quit();
 // Windows: своё имя приложения в панели задач и уведомлениях (а не «Electron»)
 if (process.platform === 'win32') app.setAppUserModelId('app.caskit');
 
+// Сбой в сторонней библиотеке (например, обрыв соединения со Steam во время входа) не должен ронять приложение
+// и показывать системное окно «JavaScript error in the main process»: пишем в журнал и продолжаем работу.
+function logCrash(kind, err) {
+	try {
+		const f = path.join(app.getPath('userData'), 'error.log');
+		require('fs').appendFileSync(f, `${new Date().toISOString()} ${kind}: ${err && err.stack || err}\n`);
+	} catch (e) { /* ignore */ }
+	console.error(kind, err);
+}
+process.on('uncaughtException', e => logCrash('uncaughtException', e));
+process.on('unhandledRejection', e => logCrash('unhandledRejection', e));
+
 let win;
 
 async function createWindow() {
@@ -57,41 +69,85 @@ async function createWindow() {
 }
 
 // ---------------------------------------------------------------- обновления (GitHub Releases)
-// Установленная версия (NSIS / AppImage / dmg) обновляется сама: скачивает дельту в фоне, затем предлагает
-// перезапуск. Portable-exe и неподписанный macOS обновиться сами не могут — для них просто уведомление со ссылкой.
+// Ничего не скачивается и не ставится без согласия: при старте (если не выключено в настройках) проверяем
+// новую версию и спрашиваем. Установленная версия (NSIS / AppImage) после «Обновить» скачивает дельту и
+// перезапускается; portable и macOS — открывают страницу релиза. «Пропустить эту версию» больше о ней не спрашивает.
 function repoSlug() {
 	const r = require('./package.json').repository;
 	const m = String((r && r.url) || r || '').match(/github\.com[/:]([^/]+)\/([^/.#]+)/);
 	return m && m[1] !== 'OWNER' ? `${m[1]}/${m[2]}` : null;
 }
 
+function appSettings() {
+	try { return JSON.parse(require('fs').readFileSync(path.join(app.getPath('userData'), 'settings.json'), 'utf8')); } catch (e) { return {}; }
+}
+
 function notifyRenderer(channel, data) { if (win && !win.isDestroyed()) win.webContents.send(channel, data); }
 
-async function manualUpdateCheck(slug) {
+const cmpVer = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0); return 0; };
+
+async function latestRelease(slug) {
+	const r = await fetch(`https://api.github.com/repos/${slug}/releases/latest`, { headers: { 'User-Agent': 'Caskit' } });
+	if (!r.ok) throw new Error(`GitHub: HTTP ${r.status}`);
+	const rel = await r.json();
+	return { version: String(rel.tag_name || '').replace(/^v/, ''), url: rel.html_url };
+}
+
+// Сборка без обновлений (npm run build:*:noupdate кладёт в package.json "caskitNoUpdates": true):
+// приложение вообще не обращается к GitHub за версиями и ничего не скачивает.
+const NO_UPDATES = (() => { try { return Boolean(require('./package.json').caskitNoUpdates); } catch (e) { return false; } })() || process.env.CASKIT_NO_UPDATES === '1';
+
+let updater = null;          // electron-updater (только установленная версия на Windows/Linux)
+let offered = null;          // { version, url, canInstall }
+
+function initUpdater() {
+	if (updater !== null) return updater;
+	updater = false;
+	const portable = Boolean(process.env.PORTABLE_EXECUTABLE_DIR);
+	if (!app.isPackaged || portable || process.platform === 'darwin') return updater;
 	try {
-		const r = await fetch(`https://api.github.com/repos/${slug}/releases/latest`, { headers: { 'User-Agent': 'Caskit' } });
-		if (!r.ok) return;
-		const rel = await r.json();
-		const latest = String(rel.tag_name || '').replace(/^v/, '');
-		const cmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0); return 0; };
-		if (latest && cmp(latest, app.getVersion()) > 0) notifyRenderer('update-available', { version: latest, url: rel.html_url });
-	} catch (e) { /* нет сети — проверим в следующий раз */ }
+		const { autoUpdater } = require('electron-updater');
+		autoUpdater.autoDownload = false;          // качаем только после «Обновить»
+		autoUpdater.autoInstallOnAppQuit = false;  // и не ставим молча при выходе
+		autoUpdater.on('download-progress', p => notifyRenderer('update-progress', { percent: Math.round(p.percent || 0) }));
+		autoUpdater.on('update-downloaded', info => notifyRenderer('update-ready', { version: info.version }));
+		autoUpdater.on('error', e => notifyRenderer('update-error', { message: String(e && e.message || e) }));
+		updater = autoUpdater;
+	} catch (e) { updater = false; }
+	return updater;
+}
+
+// Проверить и, если есть новая версия, предложить её. manual — нажата «Проверить сейчас» (игнорирует «пропустить»).
+async function checkUpdates(manual = false) {
+	const slug = repoSlug();
+	if (NO_UPDATES) return { latest: null, current: app.getVersion(), disabled: true };
+	if (!slug || !app.isPackaged) return { latest: null, current: app.getVersion() };
+	const rel = await latestRelease(slug);
+	const newer = rel.version && cmpVer(rel.version, app.getVersion()) > 0;
+	if (newer && (manual || appSettings().skipVersion !== rel.version)) {
+		const u = initUpdater();
+		if (u) { try { await u.checkForUpdates(); } catch (e) { /* дельта недоступна — покажем ссылку */ } }
+		offered = { version: rel.version, url: rel.url, canInstall: Boolean(u) };
+		notifyRenderer('update-available', offered);
+	}
+	return { latest: rel.version, current: app.getVersion(), newer };
 }
 
 function setupUpdates() {
-	const slug = repoSlug();
-	if (!app.isPackaged || !slug) return;
-	const portable = Boolean(process.env.PORTABLE_EXECUTABLE_DIR);
-	if (portable || process.platform === 'darwin') { manualUpdateCheck(slug); return; }
-	try {
-		const { autoUpdater } = require('electron-updater');
-		autoUpdater.autoDownload = true;
-		autoUpdater.on('update-downloaded', info => notifyRenderer('update-ready', { version: info.version }));
-		autoUpdater.on('error', () => manualUpdateCheck(slug));
-		ipcMain.handle('install-update', () => autoUpdater.quitAndInstall());
-		autoUpdater.checkForUpdates().catch(() => manualUpdateCheck(slug));
-	} catch (e) { manualUpdateCheck(slug); }
+	if (NO_UPDATES || (appSettings().updateMode || 'ask') === 'off') return;   // сборка без обновлений или выключено пользователем
+	checkUpdates(false).catch(() => {});
 }
+
+ipcMain.handle('check-updates', () => checkUpdates(true).catch(e => ({ error: e.message })));
+ipcMain.handle('updates-disabled', () => NO_UPDATES);
+ipcMain.handle('download-update', async () => {
+	if (NO_UPDATES) return { ok: false };
+	const u = initUpdater();
+	if (!u) return { ok: false };
+	await u.downloadUpdate();
+	return { ok: true };
+});
+ipcMain.handle('install-update', () => { if (NO_UPDATES) return; const u = initUpdater(); if (u) u.quitAndInstall(); });
 
 ipcMain.handle('open-path', (event, p) => shell.openPath(p));
 ipcMain.handle('app-version', () => app.getVersion());

@@ -1,0 +1,16 @@
+diff --git a/node_modules/steam-session/dist/transports/WebSocketCMTransport.js b/node_modules/steam-session/dist/transports/WebSocketCMTransport.js
+index 6dc819d..982a2a8 100644
+--- a/node_modules/steam-session/dist/transports/WebSocketCMTransport.js
++++ b/node_modules/steam-session/dist/transports/WebSocketCMTransport.js
+@@ -88,7 +88,10 @@ class WebSocketCMTransport {
+                     }
+                     debug(`Connecting to ${cm.endpoint} timed out after ${this._connectTimeout} ms`);
+                     this._connectTimeout = Math.min(10000, this._connectTimeout * 2);
+-                    this._websocket.disconnect();
++                    // Caskit patch: к этому моменту сокет мог уже закрыться ('disconnected' обнуляет _websocket)
++                    if (this._websocket) {
++                        try { this._websocket.disconnect(); } catch (e) { /* уже закрыт */ }
++                    }
+                     this._connectToCM().then(resolve).catch(reject);
+                 });
+                 this._websocket.on('connected', async () => {

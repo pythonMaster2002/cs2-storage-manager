@@ -298,7 +298,7 @@ class CasketSession extends EventEmitter {
 			await new Promise((resolve, reject) => {
 				let timer;
 				const finish = (fn, arg) => { clearTimeout(timer); user.off('loggedOn', onOk); user.off('error', onErr); this._loginReject = null; fn(arg); };
-				const onOk = () => finish(resolve);
+				const onOk = () => { if (user.steamID) this._sid64 = user.steamID.getSteamID64(); finish(resolve); };
 				const onErr = e => finish(reject, e);
 				user.once('loggedOn', onOk);
 				user.once('error', onErr);
@@ -507,6 +507,12 @@ class CasketSession extends EventEmitter {
 		});
 	}
 
+	// SteamID64 аккаунта: при кратком переподключении к Steam user.steamID бывает пустым — берём запомненный при входе.
+	sid64() {
+		if (this.user && this.user.steamID) this._sid64 = this.user.steamID.getSteamID64();
+		return this._sid64 || null;
+	}
+
 	sessionId() {
 		const c = (this.webCookies || []).find(x => x.startsWith('sessionid='));
 		return c ? c.split('=')[1].split(';')[0] : null;
@@ -519,16 +525,41 @@ class CasketSession extends EventEmitter {
 		const map = new Map();
 		if (!this.webCookies) return map;
 		try {
-			const res = await this.webRequest('GET', `https://steamcommunity.com/inventory/${this.user.steamID.getSteamID64()}/730/16?l=english&count=2000`);
-			if (res.status === 200) {
+			const assets = [], descr = new Map();
+			let start = null, ok = false;
+			for (let page = 0; page < 5; page++) {
+				const res = await this.webRequest('GET', `https://steamcommunity.com/inventory/${this.sid64()}/730/16?l=english&count=2000${start ? `&start_assetid=${start}` : ''}`);
+				if (res.status !== 200) { this.emit('log', `защита трейда: Steam ответил HTTP ${res.status}`); break; }
 				const inv = JSON.parse(res.body);
-				const until = new Map((inv.descriptions || []).map(d => {
-					const m = (d.owner_descriptions || []).map(o => o.value).join(' ').match(/until (.+)$/);
-					return [`${d.classid}_${d.instanceid}`, m ? m[1].trim() : ''];
-				}));
-				for (const a of inv.assets || []) map.set(String(a.assetid), until.get(`${a.classid}_${a.instanceid}`) || '');
+				if (!inv || inv.success === false) break;
+				ok = true;
+				assets.push(...(inv.assets || []));
+				for (const d of inv.descriptions || []) descr.set(`${d.classid}_${d.instanceid}`, d);
+				if (!inv.more_items || !inv.last_assetid) break;
+				start = inv.last_assetid;
 			}
-			this._protected = { ts: Date.now(), map };
+			const untilOf = d => { const m = d && (d.owner_descriptions || []).map(o => o.value).join(' ').match(/until (.+)$/); return m ? m[1].trim() : ''; };
+			// 1) по id: в контексте 16 id предмета обычно тот же, что у GC
+			const gcIds = new Set(this.csgo.inventory.map(i => String(i.id)));
+			const rest = new Map();  // market_hash_name -> [until…] для не найденных по id
+			for (const a of assets) {
+				const d = descr.get(`${a.classid}_${a.instanceid}`);
+				if (gcIds.has(String(a.assetid))) map.set(String(a.assetid), untilOf(d));
+				else if (d && d.market_hash_name) { if (!rest.has(d.market_hash_name)) rest.set(d.market_hash_name, []); rest.get(d.market_hash_name).push(untilOf(d)); }
+			}
+			// 2) id не совпали — отмечаем столько же предметов с тем же названием (сначала те, что дольше нельзя обменять)
+			if (rest.size) {
+				const free = this.csgo.inventory.filter(i => !i.casket_id && isRealItem(i) && !map.has(String(i.id)))
+					.sort((x, y) => (y.tradable_after ? +y.tradable_after : 0) - (x.tradable_after ? +x.tradable_after : 0));
+				for (const it of free) {
+					const list = rest.get(itemName(it));
+					if (list && list.length) map.set(String(it.id), list.shift());
+				}
+			}
+			if (ok) {
+				this._protected = { ts: Date.now(), map, total: assets.length };
+				if (assets.length) this.emit('log', `защита трейда: ${assets.length} шт (сопоставлено ${map.size})`);
+			}
 		} catch (e) {
 			this.emit('log', `не удалось проверить защиту трейда: ${e.message}`);
 		}
@@ -555,7 +586,7 @@ class CasketSession extends EventEmitter {
 		}
 		const wallet = this.user.wallet || {};
 		return {
-			login: this.login, steamId: this.user.steamID ? this.user.steamID.getSteamID64() : null,
+			login: this.login, steamId: this.sid64(),
 			wallet: wallet.hasWallet ? { balance: wallet.balance, currency: SteamUser.ECurrencyCode[wallet.currency] || String(wallet.currency) } : null,
 			inventoryCount: inv.filter(i => !i.casket_id && isRealItem(i)).length,
 			inventoryLimit: INVENTORY_LIMIT,
@@ -585,7 +616,6 @@ class CasketSession extends EventEmitter {
 			byKind[k] = (byKind[k] || 0) + 1;
 			if (it.rarity) byRarity[it.rarity] = (byRarity[it.rarity] || 0) + 1;
 		}
-		const protectedMap = await this.protectedItems().catch(() => new Map());
 		const wallet = this.user.wallet || {};
 		return {
 			totalItems: loose.length + stored,
@@ -594,8 +624,6 @@ class CasketSession extends EventEmitter {
 			byRarity, byKind,
 			login: this.login, personaName: this.profile ? this.profile.name : null, avatar: this.profile ? this.profile.avatar : null,
 			wallet: wallet.hasWallet ? { balance: wallet.balance, currency: SteamUser.ECurrencyCode[wallet.currency] || String(wallet.currency) } : null,
-			protectedCount: loose.filter(i => protectedMap.has(String(i.id))).length,
-			tradeUpReady: loose.filter(isTradeUpInput).length,
 			caskets: caskets.map(c => ({ name: c.custom_name || null, count: c.casket_contained_item_count || 0, capacity: CASKET_CAPACITY }))
 				.sort((a, b) => b.count - a.count),
 			top: group(loose).slice(0, 10).map(g => ({ name: g.name, image: g.image, count: g.count })),
@@ -607,7 +635,7 @@ class CasketSession extends EventEmitter {
 	// Пригодные для контракта предметы инвентаря, сгруппированные по (редкость, StatTrak).
 	// withCaskets: подгрузить содержимое всех ящиков («Load Storage Units») — такие предметы перед
 	// контрактом сами вынимаются в инвентарь.
-	async tradeUpGroups(withCaskets = false) {
+	async tradeUpGroups(withCaskets = false, pr = null) {
 		this.ensureOnline();
 		const pool = this.csgo.inventory.filter(i => !i.casket_id);
 		this._storedTradeUp = new Map();
@@ -648,7 +676,13 @@ class CasketSession extends EventEmitter {
 					const floats = ids.map(id => { const it = this._tuPool.get(id); return it && it.paint_wear != null ? Number(it.paint_wear.toFixed(6)) : null; });
 					const insp = web && [...ids, ...x.ids].map(id => web.inspect.get(id)).find(Boolean);
 					const allFloats = x.ids.map(id => { const it = this._tuPool.get(id); return it && it.paint_wear != null ? Number(it.paint_wear.toFixed(6)) : null; });
+					const tuMeta = catalog.storeMeta().tradeup;
+					const sk = one && tuMeta && tuMeta.skins[`${one.def_index}:${Math.round(one.paint_index || 0)}`];
+					// сколько скинов следующей редкости в коллекции (столько вариантов результата даёт этот предмет)
+					const nextCount = sk ? Object.values(tuMeta.skins).filter(v => v[0] === sk[0] && v[1] === sk[1] + 1).length : 0;
 					return { name: x.name, image: x.image, count: ids.length, all: x.count, ids, floats: top || !ids.length ? allFloats : floats,
+						collection: sk ? tuMeta.sets[sk[0]] : null, nextCount,
+						price: pr ? pr.value(x.name) : null, currency: pr ? pr.currency : null,
 						stored: ids.filter(id => stored.has(id)).length, inspect: insp || null,
 						blocked: top ? 'top' : null };
 				}).sort((a, b) => Boolean(a.blocked) - Boolean(b.blocked) || b.count - a.count || a.name.localeCompare(b.name));
@@ -662,7 +696,7 @@ class CasketSession extends EventEmitter {
 	// Шанс: каждый вход даёт 1/N своей коллекции, внутри коллекции исходы следующей редкости равновероятны.
 	// Float (≈, формула CS2): средний нормализованный float входов (f − min) / (max − min),
 	// перенесённый в диапазон float результата.
-	async tradeUpPreview(itemIds) {
+	async tradeUpPreview(itemIds, pr = null) {
 		this.ensureOnline();
 		const tu = catalog.storeMeta().tradeup;
 		const pool = this._tuPool || new Map();
@@ -699,22 +733,109 @@ class CasketSession extends EventEmitter {
 			return { key, name, image: itemImage(fake), chance: p, float: fl, min: sk[2], max: sk[3], exterior, collection: tu.sets[sk[0]],
 				marketName: exterior ? `${name} (${exterior})` : name };
 		}).sort((a, b) => b.chance - a.chance || a.name.localeCompare(b.name));
+		// Цены: ожидаемая стоимость результата (Σ шанс × цена) против стоимости входов
+		if (pr) {
+			const cost = items.map(it => pr.value(itemName(it), pr.phaseOf(it)));
+			inputs.forEach((x, i) => { x.price = cost[i]; });
+			for (const o of out.outcomes) o.price = pr.value(o.marketName);
+			const known = out.outcomes.filter(o => o.price != null);
+			const pSum = known.reduce((n, o) => n + o.chance, 0);
+			out.prices = {
+				currency: pr.currency, source: pr.source,
+				cost: cost.every(c => c != null) ? cost.reduce((a, b) => a + b, 0) : null,
+				ev: known.length ? known.reduce((n, o) => n + o.chance * o.price, 0) : null,
+				coverage: pSum,  // доля вероятности, для которой нашлась цена
+			};
+			if (out.prices.cost != null && out.prices.ev != null && pSum > 0.999) {
+				out.prices.profit = out.prices.ev - out.prices.cost;
+				out.prices.winChance = out.outcomes.filter(o => o.price != null && o.price > out.prices.cost).reduce((n, o) => n + o.chance, 0);
+			}
+		}
 		return out;
 	}
 
-	// Топ предметов внутри ящиков (читаем содержимое всех ящиков; кэш 10 минут).
+	// Содержимое всех ящиков: Map(id ящика -> предметы). Кэш 10 минут, сбрасывается после перекладки.
+	async _casketItems() {
+		if (this._casketCache && Date.now() - this._casketCache.ts < 10 * 60000) return this._casketCache.map;
+		if (this._casketLoading) return this._casketLoading;  // «Обзор» просит и топ, и стоимость сразу — читаем один раз
+		this._casketLoading = this._readCaskets().finally(() => { this._casketLoading = null; });
+		return this._casketLoading;
+	}
+
+	async _readCaskets() {
+		// по 4 ящика параллельно: GC отвечает на каждый отдельно, а прочитанное остаётся в инвентаре (повторно — мгновенно)
+		const map = new Map();
+		const list = this.csgo.inventory.filter(i => i.def_index === CASKET && i.casket_contained_item_count > 0);
+		let next = 0;
+		const worker = async () => {
+			while (next < list.length) {
+				const c = list[next++];
+				try {
+					map.set(String(c.id), await new Promise((resolve, reject) => this.csgo.getCasketContents(c.id, (err, items) => err ? reject(err) : resolve(items))));
+				} catch (e) { /* ящик не прочитался — пропускаем */ }
+			}
+		};
+		await Promise.all(Array.from({ length: Math.min(4, list.length) }, worker));
+		this._casketCache = { ts: Date.now(), map };
+		return map;
+	}
+
+	// Топ предметов внутри ящиков (читаем содержимое всех ящиков).
 	async storageTop(limit = 15) {
 		this.ensureOnline();
-		if (this._storageTop && Date.now() - this._storageTop.ts < 10 * 60000) return this._storageTop.data;
-		const all = [];
-		for (const c of this.csgo.inventory.filter(i => i.def_index === CASKET && i.casket_contained_item_count > 0)) {
-			try {
-				all.push(...await new Promise((resolve, reject) => this.csgo.getCasketContents(c.id, (err, items) => err ? reject(err) : resolve(items))));
-			} catch (e) { /* ящик не прочитался — пропускаем */ }
-		}
-		const data = { total: all.length, top: group(all).slice(0, limit).map(g => ({ name: g.name, image: g.image, count: g.count })) };
-		this._storageTop = { ts: Date.now(), data };
-		return data;
+		const all = [...(await this._casketItems()).values()].flat();
+		return { total: all.length, top: group(all).slice(0, limit).map(g => ({ name: g.name, image: g.image, count: g.count })) };
+	}
+
+	// Стоимость инвентаря и ящиков по прайсу pr (см. prices.pricer). Цены считаем в USD «как в прайсе»,
+	// в валюту пользователя переводим множителем pr.k — так снимки истории не зависят от валюты и комиссии.
+	async valuation(pr) {
+		this.ensureOnline();
+		const inv = this.csgo.inventory;
+		const caskets = inv.filter(i => i.def_index === CASKET);
+		const loose = inv.filter(i => !i.casket_id && i.def_index !== CASKET && isRealItem(i));
+		const contents = await this._casketItems();
+		const groups = new Map();
+		const kinds = {};
+		let unpriced = 0;
+		const add = (it, where) => {
+			const name = itemName(it);
+			const phase = pr.phaseOf(it);
+			const key = phase ? `${name} · ${phase}` : name;
+			let g = groups.get(key);
+			if (!g) {
+				const usd = pr.usd(name, phase);
+				g = { name: key, image: itemImage(it), kind: itemKind(it), usd, count: 0, inv: 0 };
+				groups.set(key, g);
+			}
+			g.count += 1;
+			if (where === 'inv') g.inv += 1;
+			if (g.usd == null) unpriced += 1;
+			else kinds[g.kind] = (kinds[g.kind] || 0) + g.usd;
+			return g.usd || 0;
+		};
+		let invUsd = 0;
+		for (const it of loose) invUsd += add(it, 'inv');
+		const casketRows = caskets.map(c => {
+			const items = contents.get(String(c.id));
+			let usd = 0;
+			if (items) for (const it of items) usd += add(it, 'casket');
+			return { id: String(c.id), name: c.custom_name || null, count: c.casket_contained_item_count || 0, usd: items ? usd : null };
+		});
+		const storageUsd = casketRows.reduce((n, c) => n + (c.usd || 0), 0);
+		const priced = [...groups.values()].filter(g => g.usd != null);
+		return {
+			login: this.login, personaName: this.profile ? this.profile.name : null,
+			usd: invUsd + storageUsd, invUsd, storageUsd, unpriced,
+			unreadCaskets: casketRows.filter(c => c.usd == null && c.count > 0).length,
+			caskets: casketRows, kinds,
+			top: priced.sort((a, b) => b.usd * b.count - a.usd * a.count).slice(0, 30)
+				.map(g => ({ name: g.name, image: g.image, count: g.count, inv: g.inv, usd: g.usd })),
+			// для истории: { название: [кол-во, цена USD] }
+			items: Object.fromEntries(priced.map(g => [g.name, [g.count, g.usd]])),
+			images: Object.fromEntries(priced.filter(g => g.image).map(g => [g.name, g.image])),
+			held: Object.fromEntries([...groups.values()].map(g => [g.name, g.count])),  // всё, что лежит (и без цены)
+		};
 	}
 
 	// Вынуть предметы для контракта из ящиков (если выбраны из «Load Storage Units»).
@@ -734,9 +855,48 @@ class CasketSession extends EventEmitter {
 		throw new Error('не удалось вынуть предметы из ящиков — попробуйте ещё раз');
 	}
 
+	// Сколько предметов каждого названия лежит в ящиках: { market_hash_name: { count, image } } (для продажи из ящиков).
+	async storedByName() {
+		this.ensureOnline();
+		const out = {};
+		for (const items of (await this._casketItems()).values()) {
+			for (const it of items) {
+				const name = itemName(it);
+				const g = out[name] || (out[name] = { count: 0, image: itemImage(it) });
+				g.count += 1;
+			}
+		}
+		return out;
+	}
+
+	// Вынуть из ящиков для продажи: { название: сколько } -> id вынутых предметов (они остаются тем же предметом).
+	async takeForSale(want) {
+		this.ensureOnline();
+		const picked = [];
+		for (const [cid, items] of await this._casketItems()) {
+			for (const it of items) {
+				const name = itemName(it);
+				if ((want[name] || 0) > 0 && it.casket_id) { picked.push({ id: String(it.id), casket: cid, name }); want[name]--; }
+			}
+		}
+		if (!picked.length) return [];
+		const used = this.csgo.inventory.filter(i => !i.casket_id && isRealItem(i)).length;
+		if (used + picked.length > INVENTORY_LIMIT) throw new Error(`в инвентаре нет места для ${picked.length} предметов из ящиков`);
+		this.emit('log', `продажа: вынимаем ${picked.length} шт из ящиков`);
+		for (const p of picked) { this.csgo.removeFromCasket(p.casket, p.id); await sleep(120); }
+		const deadline = Date.now() + 30000;
+		while (Date.now() < deadline) {
+			if (picked.every(p => this.csgo.inventory.find(i => String(i.id) === p.id && !i.casket_id))) break;
+			await sleep(400);
+		}
+		this._casketCache = null;
+		return picked.filter(p => this.csgo.inventory.find(i => String(i.id) === p.id && !i.casket_id));
+	}
+
 	// Собрать контракт из ровно 10 предметов одной редкости и одинакового статуса StatTrak.
 	// Это чистая операция Game Coordinator (оплаты нет). ВНИМАНИЕ: 10 предметов расходуются безвозвратно.
-	async craftTradeUp(itemIds) {
+	// pr — прайс (как в tradeUpPreview): к результату добавляем стоимость входов и полученного предмета
+	async craftTradeUp(itemIds, pr = null) {
 		this.ensureOnline();
 		if (!Array.isArray(itemIds) || itemIds.length !== 10) throw new Error('для контракта нужно ровно 10 предметов');
 		// «выше нет» проверяем до того, как вынимать предметы из ящиков
@@ -754,6 +914,12 @@ class CasketSession extends EventEmitter {
 		const top = items.find(i => tradeUpTopTier(i));
 		if (top) throw new Error(`«${itemName(top)}» нельзя использовать: в его коллекции нет предметов выше`);
 		const recipe = (st ? 10 : 0) + (rarity - 1);  // 0..4 обычные, 10..14 StatTrak
+		const costs = pr ? items.map(it => pr.value(itemName(it), pr.phaseOf(it))) : [];
+		const priced = r => {
+			if (!pr) return r;
+			const value = r.name ? pr.value(r.name) : null, cost = costs.every(c => c != null) ? costs.reduce((a, b) => a + b, 0) : null;
+			return { ...r, prices: { currency: pr.currency, source: pr.source, cost, value, profit: cost != null && value != null ? value - cost : null } };
+		};
 		const before = new Set(this.csgo.inventory.map(i => String(i.id)));
 		this.csgo.craft(items.map(i => i.id), recipe);
 		// GC расходует 10 предметов и выдаёт 1 новый — ждём его появления в инвентаре.
@@ -766,7 +932,8 @@ class CasketSession extends EventEmitter {
 			}, 500);
 		});
 		// itemName (с StatTrak и качеством) совпадает с market_hash_name — по нему ссылка на Торговую площадку
-		if (fresh) return { id: String(fresh.id), name: itemName(fresh), image: itemImage(fresh), rarity: fresh.rarity, stattrak: isStatTrak(fresh), float: fresh.paint_wear != null ? fresh.paint_wear : null };
+		if (fresh) return priced({ id: String(fresh.id), name: itemName(fresh), image: itemImage(fresh), rarity: fresh.rarity, stattrak: isStatTrak(fresh),
+			float: fresh.paint_wear != null ? fresh.paint_wear : null, seed: fresh.paint_seed != null ? fresh.paint_seed : null });
 		// Новый предмет не распознали — проверим, что входы исчезли (контракт всё же прошёл).
 		const consumed = itemIds.every(id => !this.csgo.inventory.find(i => String(i.id) === String(id)));
 		if (consumed) return { name: null, image: null, consumed: true };
@@ -845,6 +1012,7 @@ class CasketSession extends EventEmitter {
 			job.finished = true;
 			job.ended = Date.now();
 			if (!job.error && job.failed) job.error = `${job.failed} шт не перемещено`;
+			this._casketCache = null;
 			this.emit('jobDone', job);
 		});
 		return job;
@@ -999,4 +1167,22 @@ function humanError(e) {
 	return map[e.message] || e.message;
 }
 
-module.exports = { CasketSession, AccountStore, itemName, itemImage, CASKET_CAPACITY, humanError, _SPEED: SPEED };
+// Картинка по рыночному названию (для поиска предметов и ордеров): скины, ножи, наклейки, кейсы и прочее из файлов игры.
+let _byName = null;
+function imageByName(name) {
+	if (!_byName) {
+		_byName = new Map();
+		for (const [k, v] of Object.entries(NAMES)) if (!_byName.has(v)) _byName.set(v, k);
+		const defs = catalog.storeMeta().defs || {};
+		for (const [id, d] of Object.entries(defs)) if (d && d.name && d.image && !_byName.has(d.name)) _byName.set(d.name, `img:${d.image}`);
+	}
+	const base = String(name).replace(/ \((Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle-Scarred)\)$/, '').replace(/^(StatTrak™ |Souvenir )/, '').replace(/^★ StatTrak™ /, '★ ');
+	const key = _byName.get(base) || _byName.get(base.replace(/^★ /, ''));
+	if (!key) return null;
+	if (key.startsWith('img:')) { const img = key.slice(4); return /economy\/image\//.test(img) ? `${img}/96fx96f` : img; }
+	if (key.startsWith('sticker:')) return catalog.stickerIcon(key.slice(8));
+	const tail = IMAGES.images[key];
+	return tail ? `${IMAGES.cdn}${tail}/96fx96f` : null;
+}
+
+module.exports = { imageByName, CasketSession, AccountStore, itemName, itemImage, CASKET_CAPACITY, humanError, _SPEED: SPEED };

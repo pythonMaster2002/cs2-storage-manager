@@ -38,15 +38,20 @@ Sin suscripciones ni servidores de terceros: todo funciona en tu ordenador y hab
 - **Reglas de traslado**: «todas las cajas → Cases 01, Cases 02…», «pegatinas → Stickers». Con un clic o justo después de iniciar sesión.
 - Renombra contenedores, oculta los llenos y exporta todo a JSON/CSV.
 
+**Precios y cartera**
+- Cuánto valen tu inventario y tus unidades de almacenamiento — media de 7 días de Steam, Buff163 o Skinport, en tu moneda; un gráfico diario del valor y lo que más ha subido o bajado.
+- **Cartera (P&L)**: importa tu historial del Mercado de Steam, añade compras a mano o desde CSV — precio medio de compra, beneficio no realizado y realizado (FIFO).
+- Los precios vienen de listas públicas que se descargan cada 12 horas; tu inventario no se envía a ningún sitio.
+
 **Contratos de intercambio**
 - Contratos con objetos del inventario *y* de los contenedores (se sacan automáticamente).
-- Todos los resultados posibles con su **probabilidad**, el float de cada entrada y el **float previsto** del resultado en una barra de desgaste.
+- Todos los resultados posibles con su **probabilidad**, el float de cada entrada, el **float previsto** del resultado y el **valor esperado** frente al coste de las entradas.
 - Los objetos que el juego no acepta (el grado más alto de su colección) se marcan de antemano. Los recuerdos (souvenir) están soportados.
-- Tras el contrato: **Inspeccionar en el juego** y **Ver en el Mercado de la Comunidad**.
+- Tras el contrato: **ganancia o pérdida**, una vista detallada del objeto, **Inspeccionar en el juego** y **Mercado de la Comunidad**.
 
 **Pegatinas**
 - Aplica, raspa y quita pegatinas, incluidas las de colocación libre de CS2.
-- Float del arma con barra de desgaste, desgaste de las pegatinas, enlaces de inspección y enlace al objeto en tu inventario de Steam.
+- Vista del objeto como en el juego: float con 10 decimales, semilla del patrón, contador StatTrak™, etiqueta de nombre y desgaste de las pegatinas; enlaces para inspeccionar y al objeto en tu inventario de Steam.
 
 **Tienda de CS2 y Armory**
 - Carrito, favoritos, saldo del monedero y saldo tras la compra. Cada pago lo confirmas tú.
@@ -55,24 +60,29 @@ Sin suscripciones ni servidores de terceros: todo funciona en tu ordenador y hab
 
 **Intercambios, Mercado y Steam Guard**
 - Ofertas entrantes y salientes, aceptar/rechazar, aceptación automática de regalos.
-- Anuncios, pedidos de compra, historial con búsqueda, venta con la comisión calculada.
+- Mercado: anuncios, **órdenes de compra con el libro de órdenes en vivo y un gráfico de precio de 30 días**, historial con búsqueda, venta con la comisión calculada (también directamente desde las unidades). Las monedas sin céntimos (UAH, KZT, JPY…) se tienen en cuenta automáticamente.
 - Un mini **SDA** integrado: códigos de Steam Guard para todas las cuentas con maFile, confirmaciones de intercambios y anuncios, control de proxies.
 
 **Cuentas y privacidad**
-- Varias cuentas a la vez, cada una con su proxy SOCKS5/HTTP.
+- Varias cuentas a la vez, cada una con su proxy SOCKS5/HTTP — configúralos y compruébalos en Ajustes o pega una lista entera. Fija y ordena las cuentas.
 - Inicia sesión con un **código QR** (aparece al instante), con usuario y contraseña o con un **maFile**.
-- 10 idiomas, actualizaciones automáticas (versión con instalador).
+- **Modo streamer** (Ctrl+Mayús+H): los inicios de sesión y apodos pasan a «Cuenta 1, 2…», el saldo se oculta y los códigos de Steam Guard, socios de intercambio y proxies se difuminan: seguro para vídeos y capturas.
+- 10 idiomas. Actualizaciones solo con tu consentimiento — o desactivadas por completo.
 
 ## Capturas
 
 | | |
 |---|---|
+| <img src="screenshots/overview.png" alt="overview"> | <img src="screenshots/portfolio.png" alt="portfolio"> |
+| **Resumen**: valor, gráfico, lo más valioso | **Cartera**: ganancias y pérdidas (FIFO) |
 | <img src="screenshots/tradeup.png" alt="trade-up"> | <img src="screenshots/craft.png" alt="result"> |
-| **Contrato**: resultados, probabilidades, floats | **Resultado**: inspeccionar en el juego o abrir en el mercado |
+| **Contrato**: resultados, probabilidades, valor esperado | **Resultado**: ganancia o pérdida, ver, inspeccionar, mercado |
+| <img src="screenshots/item.png" alt="item"> | <img src="screenshots/market.png" alt="buy order"> |
+| **Objeto**: float, patrón, pegatinas | **Orden de compra**: libro de órdenes y gráfico |
 | <img src="screenshots/stickers.png" alt="stickers"> | <img src="screenshots/store.png" alt="store"> |
 | **Pegatinas**: aplicar, raspar, quitar | **Tienda de CS2**: carrito y monedero |
-| <img src="screenshots/overview.png" alt="overview"> | <img src="screenshots/guard.png" alt="Steam Guard"> |
-| **Resumen** de una o todas las cuentas | **Steam Guard**: códigos y confirmaciones |
+| <img src="screenshots/caskets.png" alt="storage units"> | <img src="screenshots/guard.png" alt="Steam Guard"> |
+| **Unidades**: traslados masivos | **Steam Guard**: códigos y confirmaciones |
 
 ## Descargar
 
@@ -91,7 +101,7 @@ La última versión está en **[Releases](https://github.com/pythonMaster2002/cs
 - **macOS** («la app está dañada» / «no se puede comprobar»): clic derecho en la app → **Abrir**, o en Terminal `xattr -cr "/Applications/Caskit.app"`.
 - **Linux AppImage**: `chmod +x Caskit-*.AppImage` y ejecútalo.
 
-**Análisis de VirusTotal** (v1.0.0): [instalador — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [portable — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).
+**VirusTotal**: cada versión se analiza automáticamente — los resultados y enlaces están al final de cada [página de versión](https://github.com/pythonMaster2002/cs2-storage-manager/releases).
 
 ### Desinstalar
 
@@ -115,6 +125,10 @@ Los inicios de sesión guardados y los ajustes quedan en la carpeta de datos (ve
 
 **¿Puedo jugar con Caskit abierto?** Si inicias CS2 en la misma cuenta, Steam mantiene solo una de las dos sesiones. Cierra antes la sesión de esa cuenta en Caskit.
 
+**¿Son seguras las actualizaciones automáticas? ¿Puede una actualización colarme algo?** Caskit nunca descarga ni instala nada por su cuenta. Cuando sale una versión nueva, primero pregunta — *Actualizar*, *Omitir esta versión* o *Ahora no* — y en Ajustes → General → Actualizaciones puedes elegir *No comprobar* para que ni siquiera compruebe. Las actualizaciones solo vienen de las [Releases](https://github.com/pythonMaster2002/cs2-storage-manager/releases) de este repositorio: las compila GitHub Actions desde el código abierto ([workflow](../.github/workflows/release.yml)), se analizan en VirusTotal y el instalador verifica el SHA-512 de cada archivo antes de instalar. La versión portable nunca se actualiza sola. Si no quieres confiar en ningún binario — compila Caskit tú mismo (abajo).
+
+**¿Puedo compilarlo yo mismo?** Sí — todo está en este repositorio, mira «Compilar desde el código» abajo. Los scripts `:noupdate` generan una versión sin actualizaciones: ni siquiera consulta a GitHub si hay versiones nuevas.
+
 **¿Dónde están mis datos?** Solo en tu ordenador: `%APPDATA%\Caskit` (Windows), `~/Library/Application Support/Caskit` (macOS), `~/.config/Caskit` (Linux).
 
 ## Apoya el proyecto
@@ -128,17 +142,24 @@ Caskit es gratis y lo seguirá siendo. Si te ahorra tiempo:
 
 ## Compilar desde el código
 
-Requiere Node.js 22+.
+Necesitas Node.js 22+ y Git.
 
 ```bash
+git clone https://github.com/pythonMaster2002/cs2-storage-manager
+cd cs2-storage-manager
 npm ci
-npm start              # ejecutar
-npm run build:win      # instalador + portable → dist/
-npm run build:linux    # AppImage + deb
-npm run build:mac      # dmg + zip (solo en macOS)
+npm start                      # ejecutar
+npm run build:win              # instalador + portable → dist/
+npm run build:linux            # AppImage + deb
+npm run build:mac              # dmg + zip (solo en macOS)
+
+# lo mismo sin actualizaciones: sin comprobaciones ni descargas
+npm run build:win:noupdate
+npm run build:linux:noupdate
+npm run build:mac:noupdate
 ```
 
-**Publicar**: sube `version` en `package.json` y luego `git tag vX.Y.Z && git push --tags`. GitHub Actions compila los tres sistemas y los publica en Releases; las copias instaladas se actualizan solas.
+**Versión**: sube `version` en `package.json` y luego `git tag vX.Y.Z && git push --tags`. GitHub Actions compila los tres sistemas, los publica en Releases y analiza los `.exe` en VirusTotal (secreto `VT_API_KEY`); las copias instaladas ofrecen la actualización.
 
 ## Política de firma de código
 

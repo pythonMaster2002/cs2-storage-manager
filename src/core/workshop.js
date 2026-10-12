@@ -32,7 +32,7 @@ async function webAssetIds(session, fresh = false) {
 	const set = new Set();
 	const inspect = new Map();  // assetid -> ссылка «осмотреть» (steam://…csgo_econ_action_preview…)
 	const ctxOf = new Map();    // assetid -> контекст (2 — обычный, 16 — под защитой обмена)
-	const sid = session.user.steamID.getSteamID64();
+	const sid = typeof session.sid64 === 'function' ? session.sid64() : session.user.steamID.getSteamID64();
 	try {
 		for (const ctx of [2, 16]) {
 			const res = await session.webRequest('GET', `https://steamcommunity.com/inventory/${sid}/730/${ctx}?l=english&count=2000`);
@@ -63,6 +63,8 @@ async function state(session) {
 	const web = await webAssetIds(session);
 	const weapons = inv.filter(isWeapon).filter(w => !web || web.set.has(String(w.id))).map(w => ({
 		id: String(w.id), name: itemName(w), image: itemImage(w), float: w.paint_wear != null ? w.paint_wear : null,
+		seed: w.paint_seed != null ? w.paint_seed : null, rarity: w.rarity || null, kills: w.kill_eater_value != null ? w.kill_eater_value : null,
+		souvenir: w.quality === 12, nameTag: w.custom_name || null,
 		inspect: web ? web.inspect.get(String(w.id)) || null : null,
 		// предмет в инвентаре Steam (контекст 16 — под защитой обмена)
 		invLink: web ? `https://steamcommunity.com/profiles/${web.sid}/inventory/#730_${web.ctxOf.get(String(w.id)) || 2}_${w.id}` : null,

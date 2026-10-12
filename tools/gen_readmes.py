@@ -675,8 +675,217 @@ CM = {
  'tr': "**Casemove’dan mı geliyorsunuz?** Casemove artık şu uyarıyı gösteriyor: *«Casemove has been replaced by Skinledger… Prices, images and items will break in Casemove eventually»* ([kaynak](https://github.com/nombersDev/casemove/blob/main/src/renderer/components/content/shared/infoModal.tsx)). Skinledger ücretlidir: ücretsiz sürüm yalnızca eşya taşır; hızlı aktarım, mağaza alımları, kontratlar, Armory, daha fazla hesap, takaslar ve pazar ayda 9,99–24,99 $ ister ([SSS](https://skinledger.com/#frequently-asked-questions), [fiyatlar](https://skinledger.com/en/pricing-compare), Ekim 2026). Caskit bunların hepsini **ücretsiz**, başka sitelerde hesap açmadan ve açık kaynak olarak yapar.",
  'zh': "**之前用过 Casemove？** Casemove 现在会显示停用通知：*«Casemove has been replaced by Skinledger… Prices, images and items will break in Casemove eventually»*（[源码](https://github.com/nombersDev/casemove/blob/main/src/renderer/components/content/shared/infoModal.tsx)）。Skinledger 是付费服务：免费版只能移动物品，快速转移、商店购买、汰换合同、军械库、更多账户、交易和市场功能需每月 9.99–24.99 美元订阅（[常见问题](https://skinledger.com/#frequently-asked-questions)、[价格](https://skinledger.com/en/pricing-compare)，2026 年 10 月）。Caskit **免费**提供以上全部功能，无需在任何网站注册账户——并且开源。",
 }
+# Версия 1.1: цены и портфель, новые скриншоты, VirusTotal, вопросы про обновления и сборку без них
+R = 'https://github.com/pythonMaster2002/cs2-storage-manager'
+WF = '../.github/workflows/release.yml'
+V11 = {
+'ru': dict(
+ f_acc_4='**Режим стримера** (Ctrl+Shift+H): вместо логинов и ников — «Аккаунт 1, 2…», баланс скрыт, коды Steam Guard, партнёры по трейдам и прокси размыты — можно спокойно снимать видео и скриншоты.',
+ f_pr='Цены и портфель',
+ f_pr_1='Сколько стоят инвентарь и ящики — по средней цене Steam за 7 дней, Buff163 или Skinport, в вашей валюте; график стоимости по дням и что подорожало или подешевело сильнее всего.',
+ f_pr_2='**Портфель (P&L)**: импорт истории Торговой площадки, покупки вручную или из CSV — средняя цена покупки, нереализованная и реализованная прибыль (FIFO).',
+ f_pr_3='Цены берутся из публичных прайсов, которые скачиваются раз в 12 часов; ваш инвентарь никуда не отправляется.',
+ f_tu_2='Все возможные исходы с **шансами**, float каждого входа, **прогноз float** результата и **ожидаемая стоимость** против цены входов.',
+ f_tu_4='После крафта — **прибыль или убыток** контракта, подробный просмотр предмета, **«Осмотреть в игре»** и **Торговая площадка**.',
+ f_st_2='Просмотр предмета как в игре: float до 10 знаков, паттерн, счётчик StatTrak™, нейм-тег и износ наклеек; «осмотреть» и ссылка на предмет в инвентаре Steam.',
+ f_trade_2='Торговая площадка: лоты, **ордера на покупку со стаканом и графиком цены за 30 дней**, история с поиском, продажа с расчётом комиссии (в том числе прямо из ящиков). Валюты без копеек (UAH, KZT, JPY…) учитываются автоматически.',
+ f_acc_1='Несколько аккаунтов одновременно, у каждого свой SOCKS5/HTTP-прокси — настройка и проверка в настройках или вставкой списка. Аккаунты можно закрепить и упорядочить.',
+ f_acc_3='10 языков интерфейса. Обновления — только с вашего согласия, или их можно выключить совсем.',
+ s_ov='**Обзор**: стоимость, график, самое дорогое', s_pf='**Портфель**: прибыль и убыток (FIFO)',
+ s_tu='**Контракт**: исходы, шансы, ожидаемая стоимость', s_craft='**Итог**: прибыль или убыток, просмотр, осмотр, ТП',
+ s_item='**Предмет**: float, паттерн, наклейки', s_bo='**Ордер**: стакан и график цены',
+ s_cask='**Ящики**: массовая перекладка',
+ vt=f'**VirusTotal**: каждый релиз проверяется автоматически — результаты и ссылки внизу [страницы релиза]({R}/releases).',
+ faq_4=f'**Безопасны ли автообновления? Не подсунет ли обновление что-то плохое?** Caskit ничего не скачивает и не устанавливает сам. Когда выходит новая версия, он сначала спрашивает — *Обновить*, *Пропустить эту версию* или *Не сейчас*, — а в Настройки → Общие → Обновления можно выбрать *Не проверять*, и проверки не будет вовсе. Обновления берутся только из [Releases]({R}/releases) этого репозитория: их собирает GitHub Actions из открытого кода ([workflow]({WF})), они проверяются на VirusTotal, а установщик сверяет SHA-512 каждого файла перед установкой. Portable-версия не обновляется сама никогда. Если не хотите доверять никаким готовым файлам — соберите Caskit сами (ниже).',
+ faq_5='**Можно ли собрать самому?** Да — всё есть в этом репозитории, см. раздел «Сборка из исходников» ниже. Скрипты `:noupdate` собирают версию без обновлений: она даже не спрашивает GitHub о новых версиях.',
+ build_1='Нужны Node.js 22+ и Git.', c_noupd='то же без обновлений: никаких проверок, ничего не скачивается',
+ rel='**Релиз**: поднимите `version` в `package.json`, затем `git tag vX.Y.Z && git push --tags`. GitHub Actions соберёт все три системы, выложит их в Releases и проверит `.exe` на VirusTotal (секрет `VT_API_KEY`); установленные копии предложат обновиться.',
+),
+'uk': dict(
+ f_acc_4='**Режим стрімера** (Ctrl+Shift+H): замість логінів і ніків — «Акаунт 1, 2…», баланс приховано, коди Steam Guard, партнери з обмінів і проксі розмиті — можна спокійно знімати відео й скриншоти.',
+ f_pr='Ціни та портфель',
+ f_pr_1='Скільки коштують інвентар і ящики — за середньою ціною Steam за 7 днів, Buff163 або Skinport, у вашій валюті; графік вартості по днях і що найбільше подорожчало чи подешевшало.',
+ f_pr_2='**Портфель (P&L)**: імпорт історії Торгового майданчика, покупки вручну або з CSV — середня ціна купівлі, нереалізований і реалізований прибуток (FIFO).',
+ f_pr_3='Ціни беруться з публічних прайсів, які завантажуються раз на 12 годин; ваш інвентар нікуди не надсилається.',
+ f_tu_2='Усі можливі результати з **шансами**, float кожного входу, **прогноз float** результату та **очікувана вартість** проти ціни входів.',
+ f_tu_4='Після крафту — **прибуток або збиток** контракту, детальний перегляд предмета, **«Оглянути в грі»** і **Торговий майданчик**.',
+ f_st_2='Перегляд предмета як у грі: float до 10 знаків, патерн, лічильник StatTrak™, нейм-тег і знос наліпок; «оглянути» та посилання на предмет в інвентарі Steam.',
+ f_trade_2='Торговий майданчик: лоти, **ордери на купівлю зі стаканом і графіком ціни за 30 днів**, історія з пошуком, продаж із розрахунком комісії (зокрема просто з ящиків). Валюти без копійок (UAH, KZT, JPY…) враховуються автоматично.',
+ f_acc_1='Кілька акаунтів одночасно, у кожного свій SOCKS5/HTTP-проксі — налаштування й перевірка в налаштуваннях або вставкою списку. Акаунти можна закріпити й упорядкувати.',
+ f_acc_3='10 мов інтерфейсу. Оновлення — лише з вашої згоди, або їх можна вимкнути зовсім.',
+ s_ov='**Огляд**: вартість, графік, найдорожче', s_pf='**Портфель**: прибуток і збиток (FIFO)',
+ s_tu='**Контракт**: результати, шанси, очікувана вартість', s_craft='**Підсумок**: прибуток або збиток, перегляд, огляд, ТМ',
+ s_item='**Предмет**: float, патерн, наліпки', s_bo='**Ордер**: стакан і графік ціни',
+ s_cask='**Ящики**: масове перекладання',
+ vt=f'**VirusTotal**: кожен реліз перевіряється автоматично — результати й посилання внизу [сторінки релізу]({R}/releases).',
+ faq_4=f'**Чи безпечні автооновлення? Чи не підсуне оновлення щось погане?** Caskit нічого не завантажує й не встановлює сам. Коли виходить нова версія, він спершу питає — *Оновити*, *Пропустити цю версію* або *Не зараз*, — а в Налаштування → Загальні → Оновлення можна вибрати *Не перевіряти*, і перевірки не буде взагалі. Оновлення беруться лише з [Releases]({R}/releases) цього репозиторію: їх збирає GitHub Actions з відкритого коду ([workflow]({WF})), вони перевіряються на VirusTotal, а інсталятор звіряє SHA-512 кожного файлу перед встановленням. Portable-версія ніколи не оновлюється сама. Якщо не хочете довіряти жодним готовим файлам — зберіть Caskit самі (нижче).',
+ faq_5='**Чи можна зібрати самому?** Так — усе є в цьому репозиторії, див. розділ «Збірка з вихідного коду» нижче. Скрипти `:noupdate` збирають версію без оновлень: вона навіть не питає GitHub про нові версії.',
+ build_1='Потрібні Node.js 22+ і Git.', c_noupd='те саме без оновлень: жодних перевірок, нічого не завантажується',
+ rel='**Реліз**: підніміть `version` у `package.json`, потім `git tag vX.Y.Z && git push --tags`. GitHub Actions збере всі три системи, викладе їх у Releases і перевірить `.exe` на VirusTotal (секрет `VT_API_KEY`); встановлені копії запропонують оновитися.',
+),
+}
+V11.update({
+'de': dict(
+ f_acc_4='**Streamer-Modus** (Strg+Umschalt+H): Logins und Nicknames werden zu „Konto 1, 2…“, das Guthaben ist ausgeblendet, Steam-Guard-Codes, Tauschpartner und Proxys sind unscharf – sicher für Videos und Screenshots.',
+ f_pr='Preise und Portfolio',
+ f_pr_1='Was Inventar und Storage Units wert sind – nach Steam-7-Tage-Durchschnitt, Buff163 oder Skinport, in deiner Währung; ein täglicher Wertverlauf und die größten Gewinner und Verlierer.',
+ f_pr_2='**Portfolio (G&V)**: Steam-Markt-Verlauf importieren, Käufe von Hand oder per CSV hinzufügen – durchschnittlicher Kaufpreis, unrealisierter und realisierter Gewinn (FIFO).',
+ f_pr_3='Die Preise stammen aus öffentlichen Preislisten, die alle 12 Stunden geladen werden; dein Inventar wird nirgendwohin gesendet.',
+ f_tu_2='Alle möglichen Ergebnisse mit **Chance**, der Float jedes Inputs, der **vorhergesagte Float** des Ergebnisses und der **Erwartungswert** gegenüber den Kosten der Inputs.',
+ f_tu_4='Nach dem Crafting: **Gewinn oder Verlust** des Vertrags, eine Detailansicht des Gegenstands, **Im Spiel ansehen** und **Community-Markt**.',
+ f_st_2='Gegenstandsansicht wie im Spiel: Float auf 10 Stellen, Muster-Seed, StatTrak™-Zähler, Namensschild und Sticker-Abnutzung; Inspect-Links und ein Link zum Gegenstand im Steam-Inventar.',
+ f_trade_2='Markt: Angebote, **Kaufaufträge mit Live-Orderbuch und 30-Tage-Preischart**, durchsuchbarer Verlauf, Verkauf mit berechneter Gebühr (auch direkt aus Storage Units). Währungen ohne Cent (UAH, KZT, JPY…) werden automatisch berücksichtigt.',
+ f_acc_1='Mehrere Konten gleichzeitig, jedes mit eigenem SOCKS5/HTTP-Proxy – in den Einstellungen festlegen und prüfen oder eine ganze Liste einfügen. Konten anheften und sortieren.',
+ f_acc_3='10 Sprachen. Updates nur mit deiner Zustimmung – oder ganz abgeschaltet.',
+ s_ov='**Übersicht**: Wert, Verlauf, wertvollste Gegenstände', s_pf='**Portfolio**: Gewinn und Verlust (FIFO)',
+ s_tu='**Trade-up**: Ergebnisse, Chancen, Erwartungswert', s_craft='**Ergebnis**: Gewinn oder Verlust, Ansicht, Inspect, Markt',
+ s_item='**Gegenstand**: Float, Muster, Sticker', s_bo='**Kaufauftrag**: Orderbuch und Preischart',
+ s_cask='**Storage Units**: Massen-Umlagerung',
+ vt=f'**VirusTotal**: Jede Version wird automatisch geprüft – Ergebnisse und Links stehen unten auf jeder [Release-Seite]({R}/releases).',
+ faq_4=f'**Sind automatische Updates sicher? Kann mir ein Update etwas unterschieben?** Caskit lädt und installiert nichts von selbst. Bei einer neuen Version fragt es zuerst – *Aktualisieren*, *Diese Version überspringen* oder *Nicht jetzt* –, und unter Einstellungen → Allgemein → Updates kannst du *Nicht prüfen* wählen, dann wird nicht einmal geprüft. Updates kommen nur aus den [Releases]({R}/releases) dieses Repositorys: GitHub Actions baut sie aus dem offenen Code ([Workflow]({WF})), sie werden auf VirusTotal geprüft, und der Installer prüft vor der Installation den SHA-512 jeder Datei. Die portable Version aktualisiert sich nie selbst. Wenn du keiner fertigen Datei vertrauen willst – baue Caskit selbst (unten).',
+ faq_5='**Kann ich es selbst bauen?** Ja – alles liegt in diesem Repository, siehe «Aus dem Quellcode bauen» unten. Die `:noupdate`-Skripte erzeugen eine Version ohne Updates: Sie fragt GitHub nicht einmal nach neuen Versionen.',
+ build_1='Benötigt Node.js 22+ und Git.', c_noupd='dasselbe ohne Updates: keine Prüfung, kein Download',
+ rel='**Release**: `version` in `package.json` erhöhen, dann `git tag vX.Y.Z && git push --tags`. GitHub Actions baut alle drei Systeme, veröffentlicht sie unter Releases und prüft die `.exe`-Dateien auf VirusTotal (Secret `VT_API_KEY`); installierte Kopien bieten das Update an.',
+),
+'es': dict(
+ f_acc_4='**Modo streamer** (Ctrl+Mayús+H): los inicios de sesión y apodos pasan a «Cuenta 1, 2…», el saldo se oculta y los códigos de Steam Guard, socios de intercambio y proxies se difuminan: seguro para vídeos y capturas.',
+ f_pr='Precios y cartera',
+ f_pr_1='Cuánto valen tu inventario y tus unidades de almacenamiento — media de 7 días de Steam, Buff163 o Skinport, en tu moneda; un gráfico diario del valor y lo que más ha subido o bajado.',
+ f_pr_2='**Cartera (P&L)**: importa tu historial del Mercado de Steam, añade compras a mano o desde CSV — precio medio de compra, beneficio no realizado y realizado (FIFO).',
+ f_pr_3='Los precios vienen de listas públicas que se descargan cada 12 horas; tu inventario no se envía a ningún sitio.',
+ f_tu_2='Todos los resultados posibles con su **probabilidad**, el float de cada entrada, el **float previsto** del resultado y el **valor esperado** frente al coste de las entradas.',
+ f_tu_4='Tras el contrato: **ganancia o pérdida**, una vista detallada del objeto, **Inspeccionar en el juego** y **Mercado de la Comunidad**.',
+ f_st_2='Vista del objeto como en el juego: float con 10 decimales, semilla del patrón, contador StatTrak™, etiqueta de nombre y desgaste de las pegatinas; enlaces para inspeccionar y al objeto en tu inventario de Steam.',
+ f_trade_2='Mercado: anuncios, **órdenes de compra con el libro de órdenes en vivo y un gráfico de precio de 30 días**, historial con búsqueda, venta con la comisión calculada (también directamente desde las unidades). Las monedas sin céntimos (UAH, KZT, JPY…) se tienen en cuenta automáticamente.',
+ f_acc_1='Varias cuentas a la vez, cada una con su proxy SOCKS5/HTTP — configúralos y compruébalos en Ajustes o pega una lista entera. Fija y ordena las cuentas.',
+ f_acc_3='10 idiomas. Actualizaciones solo con tu consentimiento — o desactivadas por completo.',
+ s_ov='**Resumen**: valor, gráfico, lo más valioso', s_pf='**Cartera**: ganancias y pérdidas (FIFO)',
+ s_tu='**Contrato**: resultados, probabilidades, valor esperado', s_craft='**Resultado**: ganancia o pérdida, ver, inspeccionar, mercado',
+ s_item='**Objeto**: float, patrón, pegatinas', s_bo='**Orden de compra**: libro de órdenes y gráfico',
+ s_cask='**Unidades**: traslados masivos',
+ vt=f'**VirusTotal**: cada versión se analiza automáticamente — los resultados y enlaces están al final de cada [página de versión]({R}/releases).',
+ faq_4=f'**¿Son seguras las actualizaciones automáticas? ¿Puede una actualización colarme algo?** Caskit nunca descarga ni instala nada por su cuenta. Cuando sale una versión nueva, primero pregunta — *Actualizar*, *Omitir esta versión* o *Ahora no* — y en Ajustes → General → Actualizaciones puedes elegir *No comprobar* para que ni siquiera compruebe. Las actualizaciones solo vienen de las [Releases]({R}/releases) de este repositorio: las compila GitHub Actions desde el código abierto ([workflow]({WF})), se analizan en VirusTotal y el instalador verifica el SHA-512 de cada archivo antes de instalar. La versión portable nunca se actualiza sola. Si no quieres confiar en ningún binario — compila Caskit tú mismo (abajo).',
+ faq_5='**¿Puedo compilarlo yo mismo?** Sí — todo está en este repositorio, mira «Compilar desde el código» abajo. Los scripts `:noupdate` generan una versión sin actualizaciones: ni siquiera consulta a GitHub si hay versiones nuevas.',
+ build_1='Necesitas Node.js 22+ y Git.', c_noupd='lo mismo sin actualizaciones: sin comprobaciones ni descargas',
+ rel='**Versión**: sube `version` en `package.json` y luego `git tag vX.Y.Z && git push --tags`. GitHub Actions compila los tres sistemas, los publica en Releases y analiza los `.exe` en VirusTotal (secreto `VT_API_KEY`); las copias instaladas ofrecen la actualización.',
+),
+'pt': dict(
+ f_acc_4='**Modo streamer** (Ctrl+Shift+H): logins e apelidos viram “Conta 1, 2…”, o saldo fica oculto, e códigos do Steam Guard, parceiros de troca e proxies ficam borrados — seguro para vídeos e capturas.',
+ f_pr='Preços e portfólio',
+ f_pr_1='Quanto valem seu inventário e suas unidades de armazenamento — média de 7 dias da Steam, Buff163 ou Skinport, na sua moeda; um gráfico diário do valor e o que mais subiu ou caiu.',
+ f_pr_2='**Portfólio (P&L)**: importe seu histórico do Mercado da Steam, adicione compras à mão ou por CSV — preço médio de compra, lucro não realizado e realizado (FIFO).',
+ f_pr_3='Os preços vêm de listas públicas baixadas a cada 12 horas; seu inventário não é enviado para lugar nenhum.',
+ f_tu_2='Todos os resultados possíveis com a **chance**, o float de cada entrada, o **float previsto** do resultado e o **valor esperado** comparado ao custo das entradas.',
+ f_tu_4='Depois do contrato: **lucro ou prejuízo**, uma visualização detalhada do item, **Inspecionar no jogo** e **Mercado da Comunidade**.',
+ f_st_2='Visualização do item como no jogo: float com 10 casas, semente do padrão, contador StatTrak™, etiqueta de nome e desgaste dos adesivos; links para inspecionar e para o item no seu inventário Steam.',
+ f_trade_2='Mercado: anúncios, **ordens de compra com o livro de ofertas ao vivo e gráfico de preço de 30 dias**, histórico com busca, venda com a taxa calculada (inclusive direto das unidades). Moedas sem centavos (UAH, KZT, JPY…) são tratadas automaticamente.',
+ f_acc_1='Várias contas ao mesmo tempo, cada uma com seu proxy SOCKS5/HTTP — configure e teste nas Configurações ou cole uma lista inteira. Fixe e reordene as contas.',
+ f_acc_3='10 idiomas. Atualizações só com o seu consentimento — ou totalmente desligadas.',
+ s_ov='**Visão geral**: valor, gráfico, itens mais valiosos', s_pf='**Portfólio**: lucro e prejuízo (FIFO)',
+ s_tu='**Contrato**: resultados, chances, valor esperado', s_craft='**Resultado**: lucro ou prejuízo, ver, inspecionar, mercado',
+ s_item='**Item**: float, padrão, adesivos', s_bo='**Ordem de compra**: livro de ofertas e gráfico',
+ s_cask='**Unidades**: transferências em massa',
+ vt=f'**VirusTotal**: cada versão é analisada automaticamente — os resultados e links ficam no fim de cada [página de versão]({R}/releases).',
+ faq_4=f'**As atualizações automáticas são seguras? Uma atualização pode me enganar?** O Caskit nunca baixa nem instala nada sozinho. Quando sai uma versão nova, ele pergunta antes — *Atualizar*, *Pular esta versão* ou *Agora não* — e em Configurações → Geral → Atualizações você pode escolher *Não verificar* para nem checar. As atualizações vêm só das [Releases]({R}/releases) deste repositório: são compiladas pelo GitHub Actions a partir do código aberto ([workflow]({WF})), analisadas no VirusTotal, e o instalador confere o SHA-512 de cada arquivo antes de instalar. A versão portable nunca se atualiza sozinha. Se não quiser confiar em nenhum binário — compile o Caskit você mesmo (abaixo).',
+ faq_5='**Posso compilar eu mesmo?** Sim — está tudo neste repositório, veja «Compilar a partir do código» abaixo. Os scripts `:noupdate` geram uma versão sem atualizações: ela nem pergunta ao GitHub sobre versões novas.',
+ build_1='Requer Node.js 22+ e Git.', c_noupd='o mesmo sem atualizações: sem verificações, nada é baixado',
+ rel='**Versão**: aumente `version` no `package.json`, depois `git tag vX.Y.Z && git push --tags`. O GitHub Actions compila os três sistemas, publica em Releases e analisa os `.exe` no VirusTotal (segredo `VT_API_KEY`); as cópias instaladas oferecem a atualização.',
+),
+})
+V11.update({
+'fr': dict(
+ f_acc_4='**Mode streamer** (Ctrl+Maj+H) : identifiants et pseudos deviennent « Compte 1, 2… », le solde est masqué, codes Steam Guard, partenaires d’échange et proxys sont floutés — sans risque pour les vidéos et captures.',
+ f_pr='Prix et portefeuille',
+ f_pr_1='Ce que valent votre inventaire et vos unités de stockage — moyenne Steam sur 7 jours, Buff163 ou Skinport, dans votre devise ; un graphique quotidien de la valeur et les plus fortes hausses et baisses.',
+ f_pr_2='**Portefeuille (P&L)** : importez votre historique du Marché Steam, ajoutez des achats à la main ou par CSV — prix d’achat moyen, plus-value latente et réalisée (FIFO).',
+ f_pr_3='Les prix viennent de listes publiques téléchargées toutes les 12 heures ; votre inventaire n’est envoyé nulle part.',
+ f_tu_2='Chaque résultat possible avec sa **probabilité**, le float de chaque entrée, le **float prévu** du résultat et la **valeur attendue** face au coût des entrées.',
+ f_tu_4='Après le contrat : **gain ou perte**, une vue détaillée de l’objet, **Inspecter en jeu** et **Marché de la communauté**.',
+ f_st_2='Vue de l’objet comme en jeu : float à 10 décimales, graine du motif, compteur StatTrak™, étiquette de nom et usure des autocollants ; liens d’inspection et vers l’objet dans votre inventaire Steam.',
+ f_trade_2='Marché : annonces, **ordres d’achat avec le carnet d’ordres en direct et un graphique des prix sur 30 jours**, historique avec recherche, vente avec les frais calculés (y compris directement depuis les unités). Les devises sans centimes (UAH, KZT, JPY…) sont gérées automatiquement.',
+ f_acc_1='Plusieurs comptes à la fois, chacun avec son proxy SOCKS5/HTTP — à régler et vérifier dans les Paramètres ou en collant une liste. Épinglez et réordonnez les comptes.',
+ f_acc_3='10 langues. Mises à jour uniquement avec votre accord — ou complètement désactivées.',
+ s_ov='**Vue d’ensemble** : valeur, graphique, objets les plus chers', s_pf='**Portefeuille** : gains et pertes (FIFO)',
+ s_tu='**Contrat** : résultats, probabilités, valeur attendue', s_craft='**Résultat** : gain ou perte, voir, inspecter, marché',
+ s_item='**Objet** : float, motif, autocollants', s_bo='**Ordre d’achat** : carnet d’ordres et graphique',
+ s_cask='**Unités de stockage** : transferts en masse',
+ vt=f'**VirusTotal** : chaque version est analysée automatiquement — résultats et liens en bas de chaque [page de version]({R}/releases).',
+ faq_4=f'**Les mises à jour automatiques sont-elles sûres ? Une mise à jour peut-elle m’arnaquer ?** Caskit ne télécharge ni n’installe rien de lui-même. Quand une nouvelle version sort, il demande d’abord — *Mettre à jour*, *Ignorer cette version* ou *Plus tard* — et dans Paramètres → Général → Mises à jour vous pouvez choisir *Ne pas vérifier* pour qu’il ne vérifie même plus. Les mises à jour viennent uniquement des [Releases]({R}/releases) de ce dépôt : elles sont compilées par GitHub Actions à partir du code ouvert ([workflow]({WF})), analysées sur VirusTotal, et l’installateur vérifie le SHA-512 de chaque fichier avant l’installation. La version portable ne se met jamais à jour seule. Si vous ne voulez faire confiance à aucun binaire — compilez Caskit vous-même (ci-dessous).',
+ faq_5='**Puis-je le compiler moi-même ?** Oui — tout est dans ce dépôt, voir « Compiler depuis les sources » ci-dessous. Les scripts `:noupdate` produisent une version sans mises à jour : elle ne demande même pas à GitHub s’il existe une nouvelle version.',
+ build_1='Nécessite Node.js 22+ et Git.', c_noupd='la même chose sans mises à jour : aucune vérification, aucun téléchargement',
+ rel='**Publication** : augmentez `version` dans `package.json`, puis `git tag vX.Y.Z && git push --tags`. GitHub Actions compile les trois systèmes, les publie dans Releases et analyse les `.exe` sur VirusTotal (secret `VT_API_KEY`) ; les copies installées proposent la mise à jour.',
+),
+'pl': dict(
+ f_acc_4='**Tryb streamera** (Ctrl+Shift+H): loginy i nicki zmieniają się na „Konto 1, 2…”, saldo jest ukryte, a kody Steam Guard, partnerzy wymian i proxy są rozmyte — bezpiecznie do nagrań i zrzutów ekranu.',
+ f_pr='Ceny i portfel',
+ f_pr_1='Ile są warte ekwipunek i skrzynie — według 7-dniowej średniej Steam, Buff163 lub Skinport, w Twojej walucie; dzienny wykres wartości oraz największe wzrosty i spadki.',
+ f_pr_2='**Portfel (P&L)**: import historii Rynku Steam, zakupy ręcznie lub z CSV — średnia cena zakupu, niezrealizowany i zrealizowany zysk (FIFO).',
+ f_pr_3='Ceny pochodzą z publicznych cenników pobieranych co 12 godzin; Twój ekwipunek nigdzie nie jest wysyłany.',
+ f_tu_2='Każdy możliwy wynik z **szansą**, float każdego wejścia, **przewidywany float** wyniku i **wartość oczekiwana** w porównaniu z kosztem wejść.',
+ f_tu_4='Po kontrakcie: **zysk lub strata**, szczegółowy podgląd przedmiotu, **Obejrzyj w grze** i **Rynek Społeczności**.',
+ f_st_2='Podgląd przedmiotu jak w grze: float do 10 miejsc, seed wzoru, licznik StatTrak™, plakietka z nazwą i zużycie naklejek; linki do obejrzenia i do przedmiotu w ekwipunku Steam.',
+ f_trade_2='Rynek: oferty, **zlecenia kupna z arkuszem zleceń na żywo i 30-dniowym wykresem ceny**, historia z wyszukiwaniem, sprzedaż z wyliczoną prowizją (także prosto ze skrzyń). Waluty bez groszy (UAH, KZT, JPY…) są uwzględniane automatycznie.',
+ f_acc_1='Kilka kont naraz, każde z własnym proxy SOCKS5/HTTP — ustawianie i sprawdzanie w Ustawieniach lub wklejenie całej listy. Przypinanie i zmiana kolejności kont.',
+ f_acc_3='10 języków. Aktualizacje tylko za Twoją zgodą — albo całkowicie wyłączone.',
+ s_ov='**Przegląd**: wartość, wykres, najcenniejsze przedmioty', s_pf='**Portfel**: zyski i straty (FIFO)',
+ s_tu='**Kontrakt**: wyniki, szanse, wartość oczekiwana', s_craft='**Wynik**: zysk lub strata, podgląd, obejrzyj, rynek',
+ s_item='**Przedmiot**: float, wzór, naklejki', s_bo='**Zlecenie kupna**: arkusz zleceń i wykres ceny',
+ s_cask='**Skrzynie**: masowe przenoszenie',
+ vt=f'**VirusTotal**: każde wydanie jest skanowane automatycznie — wyniki i linki są na dole każdej [strony wydania]({R}/releases).',
+ faq_4=f'**Czy automatyczne aktualizacje są bezpieczne? Czy aktualizacja może mnie oszukać?** Caskit nic nie pobiera ani nie instaluje sam. Gdy wychodzi nowa wersja, najpierw pyta — *Aktualizuj*, *Pomiń tę wersję* lub *Nie teraz* — a w Ustawienia → Ogólne → Aktualizacje możesz wybrać *Nie sprawdzaj*, żeby nawet nie sprawdzał. Aktualizacje pochodzą tylko z [Releases]({R}/releases) tego repozytorium: buduje je GitHub Actions z otwartego kodu ([workflow]({WF})), są skanowane na VirusTotal, a instalator sprawdza SHA-512 każdego pliku przed instalacją. Wersja portable nigdy nie aktualizuje się sama. Jeśli nie chcesz ufać żadnym gotowym plikom — zbuduj Caskit sam (niżej).',
+ faq_5='**Czy mogę zbudować go sam?** Tak — wszystko jest w tym repozytorium, zobacz «Budowanie ze źródeł» niżej. Skrypty `:noupdate` tworzą wersję bez aktualizacji: nawet nie pyta GitHuba o nowe wersje.',
+ build_1='Wymaga Node.js 22+ i Git.', c_noupd='to samo bez aktualizacji: bez sprawdzania, nic się nie pobiera',
+ rel='**Wydanie**: podnieś `version` w `package.json`, potem `git tag vX.Y.Z && git push --tags`. GitHub Actions zbuduje wszystkie trzy systemy, opublikuje je w Releases i przeskanuje pliki `.exe` na VirusTotal (sekret `VT_API_KEY`); zainstalowane kopie zaproponują aktualizację.',
+),
+'tr': dict(
+ f_acc_4='**Yayıncı modu** (Ctrl+Shift+H): giriş adları ve takma adlar “Hesap 1, 2…” olur, bakiye gizlenir; Steam Guard kodları, takas ortakları ve proxy’ler bulanıklaşır — video ve ekran görüntüsü için güvenli.',
+ f_pr='Fiyatlar ve portföy',
+ f_pr_1='Envanterinizin ve depolama birimlerinizin değeri — Steam 7 günlük ortalaması, Buff163 veya Skinport fiyatlarıyla, kendi para biriminizde; günlük değer grafiği ve en çok yükselen ve düşenler.',
+ f_pr_2='**Portföy (K/Z)**: Steam Pazarı geçmişinizi içe aktarın, alımları elle veya CSV ile ekleyin — ortalama alış fiyatı, gerçekleşmemiş ve gerçekleşmiş kâr (FIFO).',
+ f_pr_3='Fiyatlar 12 saatte bir indirilen herkese açık fiyat listelerinden gelir; envanteriniz hiçbir yere gönderilmez.',
+ f_tu_2='Olası her sonuç **şansıyla**, her girdinin float’ı, sonucun **tahmini float’ı** ve girdilerin maliyetine karşı **beklenen değer**.',
+ f_tu_4='Kontrattan sonra: **kâr veya zarar**, eşyanın ayrıntılı görünümü, **Oyunda incele** ve **Topluluk Pazarı**.',
+ f_st_2='Oyundaki gibi eşya görünümü: 10 basamaklı float, desen tohumu, StatTrak™ sayacı, isim etiketi ve çıkartma aşınması; inceleme bağlantıları ve Steam envanterindeki eşyaya bağlantı.',
+ f_trade_2='Pazar: ilanlar, **canlı emir defteri ve 30 günlük fiyat grafiğiyle alış emirleri**, aranabilir geçmiş, komisyonu hesaplanmış satış (doğrudan depolama birimlerinden de). Kuruşsuz para birimleri (UAH, KZT, JPY…) otomatik olarak dikkate alınır.',
+ f_acc_1='Aynı anda birden çok hesap, her biri kendi SOCKS5/HTTP proxy’siyle — Ayarlar’da belirleyip kontrol edin veya bir liste yapıştırın. Hesapları sabitleyin ve sıralayın.',
+ f_acc_3='10 dil. Güncellemeler yalnızca onayınızla — ya da tamamen kapalı.',
+ s_ov='**Genel bakış**: değer, grafik, en değerli eşyalar', s_pf='**Portföy**: kâr ve zarar (FIFO)',
+ s_tu='**Kontrat**: sonuçlar, şanslar, beklenen değer', s_craft='**Sonuç**: kâr veya zarar, görüntüle, incele, pazar',
+ s_item='**Eşya**: float, desen, çıkartmalar', s_bo='**Alış emri**: emir defteri ve fiyat grafiği',
+ s_cask='**Depolama birimleri**: toplu aktarım',
+ vt=f'**VirusTotal**: her sürüm otomatik olarak taranır — sonuçlar ve bağlantılar her [sürüm sayfasının]({R}/releases) altında.',
+ faq_4=f'**Otomatik güncellemeler güvenli mi? Bir güncelleme beni dolandırabilir mi?** Caskit kendi kendine hiçbir şey indirmez veya kurmaz. Yeni sürüm çıktığında önce sorar — *Güncelle*, *Bu sürümü atla* veya *Şimdi değil* — ve Ayarlar → Genel → Güncellemeler’de *Kontrol etme*’yi seçerseniz kontrol bile yapılmaz. Güncellemeler yalnızca bu deponun [Releases]({R}/releases) sayfasından gelir: GitHub Actions bunları açık koddan derler ([workflow]({WF})), VirusTotal’da taranırlar ve kurulum programı kurmadan önce her dosyanın SHA-512’sini doğrular. Portable sürüm asla kendini güncellemez. Hiçbir hazır dosyaya güvenmek istemiyorsanız — Caskit’i kendiniz derleyin (aşağıda).',
+ faq_5='**Kendim derleyebilir miyim?** Evet — her şey bu depoda, aşağıdaki «Kaynaktan derleme» bölümüne bakın. `:noupdate` betikleri güncellemesiz bir sürüm üretir: GitHub’a yeni sürüm olup olmadığını bile sormaz.',
+ build_1='Node.js 22+ ve Git gerekir.', c_noupd='aynısı güncellemesiz: kontrol yok, hiçbir şey indirilmez',
+ rel='**Sürüm**: `package.json` içindeki `version` değerini artırın, ardından `git tag vX.Y.Z && git push --tags`. GitHub Actions üç sistemi derler, Releases’e yükler ve `.exe` dosyalarını VirusTotal’da tarar (`VT_API_KEY` sırrı); kurulu kopyalar güncellemeyi önerir.',
+),
+'zh': dict(
+ f_acc_4='**主播模式**（Ctrl+Shift+H）：登录名和昵称显示为“账户 1、2……”，隐藏余额，Steam 令牌验证码、交易对象和代理会被模糊——录视频、截图都安全。',
+ f_pr='价格与投资组合',
+ f_pr_1='库存和储物柜值多少钱——按 Steam 7 日均价、Buff163 或 Skinport 价格，以你的货币显示；每日价值曲线以及涨跌最多的物品。',
+ f_pr_2='**投资组合（盈亏）**：导入 Steam 市场记录，手动或通过 CSV 添加购买记录——平均买入价、未实现和已实现盈利（先进先出）。',
+ f_pr_3='价格来自每 12 小时下载一次的公开价格表；你的库存不会发送到任何地方。',
+ f_tu_2='每种可能结果的**概率**、每件输入的磨损值、结果的**预测磨损值**，以及与输入成本对比的**期望价值**。',
+ f_tu_4='汰换后：合同的**盈利或亏损**、物品详情、**在游戏中检视**和**社区市场**。',
+ f_st_2='像游戏中一样的物品详情：10 位磨损值、图案种子、StatTrak™ 计数、名称标签和印花磨损；检视链接以及 Steam 库存中该物品的链接。',
+ f_trade_2='市场：在售、**带实时挂单簿和 30 日价格图的求购订单**、可搜索的历史记录、自动计算手续费的出售（也可直接从储物柜出售）。没有小数单位的货币（UAH、KZT、JPY……）会自动处理。',
+ f_acc_1='同时登录多个账户，每个账户使用独立的 SOCKS5/HTTP 代理——在设置中配置和检测，或直接粘贴整个列表。账户可置顶并排序。',
+ f_acc_3='10 种界面语言。更新仅在你同意后进行——也可以完全关闭。',
+ s_ov='**概览**：价值、曲线、最值钱的物品', s_pf='**投资组合**：盈亏（先进先出）',
+ s_tu='**汰换合同**：结果、概率、期望价值', s_craft='**结果**：盈亏、查看、检视、市场',
+ s_item='**物品**：磨损、图案、印花', s_bo='**求购订单**：挂单簿和价格图',
+ s_cask='**储物柜**：批量转移',
+ vt=f'**VirusTotal**：每个版本都会自动扫描——结果和链接位于每个[发布页面]({R}/releases)底部。',
+ faq_4=f'**自动更新安全吗？更新会不会坑我？** Caskit 从不自行下载或安装任何东西。有新版本时会先询问你——“更新”、“跳过此版本”或“以后再说”——在 设置 → 常规 → 更新 中选择“不检查”，就连检查也不会进行。更新只来自本仓库的 [Releases]({R}/releases)：由 GitHub Actions 从公开代码构建（[workflow]({WF})），经过 VirusTotal 扫描，安装程序在安装前会校验每个文件的 SHA-512。便携版永远不会自行更新。如果你不想信任任何现成的文件——可以自己构建 Caskit（见下文）。',
+ faq_5='**可以自己构建吗？** 可以——所需的一切都在本仓库中，见下方“从源码构建”。`:noupdate` 脚本会构建不含更新功能的版本：它甚至不会向 GitHub 查询新版本。',
+ build_1='需要 Node.js 22+ 和 Git。', c_noupd='同上但不含更新：不检查、不下载',
+ rel='**发布**：提高 `package.json` 中的 `version`，然后执行 `git tag vX.Y.Z && git push --tags`。GitHub Actions 会构建三个系统、发布到 Releases 并在 VirusTotal 上扫描 `.exe` 文件（密钥 `VT_API_KEY`）；已安装的副本会提示更新。',
+),
+})
+
 for _c, _e in EXTRA.items():
     T[_c].update(_e)
+    T[_c].update(V11[_c])
     T[_c]['cm'] = CM[_c]
 
 TEMPLATE = '''<p align="center"><img src="../build/icon.png" width="120" alt="Caskit"></p>
@@ -710,6 +919,11 @@ TEMPLATE = '''<p align="center"><img src="../build/icon.png" width="120" alt="Ca
 - {f_caskets_2}
 - {f_caskets_3}
 
+**{f_pr}**
+- {f_pr_1}
+- {f_pr_2}
+- {f_pr_3}
+
 **{f_tu}**
 - {f_tu_1}
 - {f_tu_2}
@@ -733,18 +947,23 @@ TEMPLATE = '''<p align="center"><img src="../build/icon.png" width="120" alt="Ca
 **{f_acc}**
 - {f_acc_1}
 - {f_acc_2}
+- {f_acc_4}
 - {f_acc_3}
 
 ## {screens}
 
 | | |
 |---|---|
+| <img src="screenshots/overview{shots}.png" alt="overview"> | <img src="screenshots/portfolio{shots}.png" alt="portfolio"> |
+| {s_ov} | {s_pf} |
 | <img src="screenshots/tradeup{shots}.png" alt="trade-up"> | <img src="screenshots/craft{shots}.png" alt="result"> |
 | {s_tu} | {s_craft} |
+| <img src="screenshots/item{shots}.png" alt="item"> | <img src="screenshots/market{shots}.png" alt="buy order"> |
+| {s_item} | {s_bo} |
 | <img src="screenshots/stickers{shots}.png" alt="stickers"> | <img src="screenshots/store{shots}.png" alt="store"> |
 | {s_st} | {s_store} |
-| <img src="screenshots/overview{shots}.png" alt="overview"> | <img src="screenshots/guard{shots}.png" alt="Steam Guard"> |
-| {s_ov} | {s_guard} |
+| <img src="screenshots/caskets{shots}.png" alt="storage units"> | <img src="screenshots/guard{shots}.png" alt="Steam Guard"> |
+| {s_cask} | {s_guard} |
 
 ## {dl}
 
@@ -787,6 +1006,10 @@ TEMPLATE = '''<p align="center"><img src="../build/icon.png" width="120" alt="Ca
 
 {faq_2}
 
+{faq_4}
+
+{faq_5}
+
 {faq_3}
 
 ## {sup}
@@ -803,11 +1026,18 @@ TEMPLATE = '''<p align="center"><img src="../build/icon.png" width="120" alt="Ca
 {build_1}
 
 ```bash
+git clone {repo}
+cd cs2-storage-manager
 npm ci
-npm start              # {c_run}
-npm run build:win      # {c_win}
-npm run build:linux    # AppImage + deb
-npm run build:mac      # {c_mac}
+npm start                      # {c_run}
+npm run build:win              # {c_win}
+npm run build:linux            # AppImage + deb
+npm run build:mac              # {c_mac}
+
+# {c_noupd}
+npm run build:win:noupdate
+npm run build:linux:noupdate
+npm run build:mac:noupdate
 ```
 
 {rel}

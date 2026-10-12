@@ -26,6 +26,7 @@ function applyStaticI18n() {
 	document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
 	document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
 	document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+	document.querySelectorAll('[data-i18n-tip]').forEach(el => { el.dataset.tip = t(el.dataset.i18nTip); el.setAttribute('aria-label', el.dataset.tip); });
 }
 
 // Смена языка: сохраняем в настройках приложения (localStorage привязан к случайному порту и теряется
@@ -114,7 +115,7 @@ function setMode(mode) {
 	const was = ui.mode;
 	ui.mode = mode;
 	document.querySelectorAll('.login-card .segmented button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-	document.querySelectorAll('[data-pane]').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== mode));
+	document.querySelectorAll('.login-card [data-pane]').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== mode));
 	$('loginBtn').classList.toggle('hidden', mode === 'qr');
 	$('loginError').classList.add('hidden');
 	if (was === 'qr' && mode !== 'qr') cancelQr();
@@ -137,7 +138,7 @@ function startQr() {
 }
 function cancelQr() {
 	const p = ui.status && ui.status.pending;
-	if (ui.qr.state === 'loading' || ui.qr.state === 'shown' || qrPending(p)) api('/api/login/qr/cancel', {}).catch(() => {});
+	if (ui.qr.state === 'loading' || ui.qr.state === 'shown' || qrPending(p)) { ui.qrCancelledAt = Date.now(); api('/api/login/qr/cancel', {}).catch(() => {}); }
 	ui.qr = { state: 'idle', img: null, since: 0 };
 }
 function renderQrBox(pending) {
@@ -167,7 +168,7 @@ async function renderSaved() {
 	$('savedList').innerHTML = rest.map(a => `
 		<div class="saved-item">
 			${avatarHtml(a)}
-			<div class="grow"><div class="strong">${esc(a.personaName || a.login)}</div>${a.personaName && a.personaName !== a.login ? `<div class="muted small">${esc(a.login)}</div>` : ''}
+			<div class="grow"><div class="strong">${esc(accName(a))}</div>${accSub(a) ? `<div class="muted small">${esc(accSub(a))}</div>` : ''}
 				<div class="muted small">${a.hasMaFile ? 'maFile · ' : ''}${a.proxy ? t('proxy_label').toLowerCase() : ''}</div></div>
 			<button class="btn primary small" data-login="${esc(a.login)}">${esc(t('btn_login'))}</button>
 			<button class="forget" data-forget="${esc(a.login)}">×</button>
@@ -177,7 +178,7 @@ async function renderSaved() {
 async function login(body) {
 	$('loginError').classList.add('hidden');
 	if (body.mode !== 'qr') ui.qr.state = 'idle';  // сервер заменит висящий QR этим входом
-	if (body.mode !== 'qr') { showView('connectingView'); $('connectingTitle').textContent = body.login ? t('connecting_to', { login: body.login }) : t('connecting'); }
+	if (body.mode !== 'qr') { showView('connectingView'); $('connectingTitle').textContent = body.login ? t('connecting_to', { login: loginName(body.login) }) : t('connecting'); }
 	try { await api('/api/login', body); ui._wasPending = true; poll(true); }
 	catch (e) { showView('loginView'); showLoginError(e.message); toast(e.message, 'bad'); }
 }
@@ -208,7 +209,7 @@ function readMaFile(file) {
 			ui.maFile = ma;
 			$('maLogin').value = ma.account_name || '';
 			$('dropzone').classList.add('loaded');
-			$('dropText').textContent = `maFile: ${ma.account_name || file.name}`;
+			$('dropText').textContent = `maFile: ${streamer() ? '•••' : (ma.account_name || file.name)}`;
 		} catch (e) {
 			ui.maFile = null;
 			$('dropzone').classList.remove('loaded');
@@ -223,12 +224,19 @@ function renderAccounts(s) {
 	const accounts = s.accounts || [];
 	const pending = s.pending;
 	if (!accounts.some(a => a.login === ui.active)) ui.active = accounts.length ? accounts[accounts.length - 1].login : null;
-	// pending завершился входом -> показываем новый аккаунт
+	// pending завершился входом -> показываем новый аккаунт. Но если это мы сами отменили QR (переключились
+	// на «Логин» или maFile при добавлении аккаунта), вход не закончился — остаёмся в форме входа.
 	if (ui._wasPending && !pending) {
-		ui.addingAccount = false;
-		if (accounts.length) { ui.active = accounts[accounts.length - 1].login; ui._freshActive = true; }
+		const fresh = accounts.find(a => !ui._knownLogins.has(a.login));
+		const cancelledQr = ui._lastPending === 'qr' && Date.now() - (ui.qrCancelledAt || 0) < 8000;
+		if (fresh || !cancelledQr) {
+			ui.addingAccount = false;
+			if (accounts.length) { ui.active = (fresh || accounts[accounts.length - 1]).login; ui._freshActive = true; }
+		}
 	}
 	ui._wasPending = Boolean(pending && ['connecting', 'guard', 'qr'].includes(pending.status));
+	if (pending) ui._lastPending = pending.status;
+	ui._knownLogins = new Set(accounts.map(a => a.login));
 
 	if (ui.addingAccount || accounts.length === 0) { renderLoginFlow(pending, accounts.length > 0); return; }
 
@@ -252,6 +260,8 @@ function renderAccounts(s) {
 		if (ui.tab === 'store') loadStore();
 		if (ui.tab === 'tradeup') loadTradeup();
 		if (ui.tab === 'overview') loadOverview();
+		ui.pnl = null;
+		if (ui.tab === 'pnl') loadPnl();
 		loadState().catch(e => toast(e.message, 'bad'));
 	}
 	handleActiveJob(active);
@@ -262,11 +272,11 @@ function renderLoginFlow(pending, hasAccounts) {
 	const st = pending && pending.status;
 	if (st === 'connecting' && !qrPending(pending)) {
 		showView('connectingView');
-		$('connectingTitle').textContent = pending.login ? t('connecting_to', { login: pending.login }) : t('connecting');
+		$('connectingTitle').textContent = pending.login ? t('connecting_to', { login: loginName(pending.login) }) : t('connecting');
 		$('guardModal').classList.add('hidden');
 	} else if (st === 'guard') {
 		showView('connectingView');
-		$('connectingTitle').textContent = pending.login ? t('connecting_to', { login: pending.login }) : t('connecting');
+		$('connectingTitle').textContent = pending.login ? t('connecting_to', { login: loginName(pending.login) }) : t('connecting');
 		showGuard(pending);
 	} else {
 		const wasLogin = !$('loginView').classList.contains('hidden');
@@ -296,30 +306,133 @@ function prefillRelogin(login) {
 	setMode('creds'); $('crLogin').value = login;
 }
 
+// ---------------- режим стримера: вместо логинов и ников — «Аккаунт N», баланс скрыт, коды Steam Guard,
+// партнёры по трейдам и прокси размыты (наведение показывает); по галочке — размыты и суммы стоимости/портфеля.
+const streamer = () => Boolean(ui.settings && ui.settings.streamerMode);
+function acctNo(login) {
+	const seen = new Map();
+	for (const a of [...(ui.acctList || []), ...((ui.status && ui.status.accounts) || []), ...(ui.saved || [])]) if (a && a.login && !seen.has(a.login)) seen.set(a.login, a);
+	const i = orderedAccounts([...seen.values()]).findIndex(a => a.login === login);
+	return i >= 0 ? i + 1 : seen.size + 1;
+}
+const loginName = login => (streamer() ? t('streamer_acct', { n: acctNo(login) }) : login);
+const accName = a => (streamer() ? loginName(a.login) : (a.personaName || a.login));
+const accSub = a => (!streamer() && a.personaName && a.personaName !== a.login ? a.login : '');   // логин под ником
+const walletText = w => (!w ? '' : streamer() ? '•••' : `${money(w.balance)} ${w.currency}`);
+function applyStreamer() {
+	document.body.classList.toggle('streamer', streamer());
+	document.body.classList.toggle('sm-money', streamer() && Boolean(ui.settings.streamerMoney));
+	$('streamerBadge').classList.toggle('hidden', !streamer());
+}
+async function toggleStreamer(on = !streamer()) {
+	await saveSetting({ streamerMode: on });
+	toast(t(on ? 'streamer_on' : 'streamer_off'), 'good');
+	rerenderPrivate();
+}
+// перерисовать всё, где видны имена, балансы и коды (вкладка перезагружается — трейды, Steam Guard и т. п.)
+function rerenderPrivate() {
+	applyStreamer();
+	rerenderAll();
+	if (ui.saved) renderSaved();
+	if (!$('settingsModal').classList.contains('hidden')) openSettings();
+	if (ui.tab) switchTab(ui.tab);
+}
+
 // Аватарка Steam (кэш на диске, см. session._loadProfile) или буква логина, пока её нет.
 function avatarHtml(a, cls = '') {
+	if (a && streamer()) return `<div class="avatar ${cls}">${acctNo(a.login)}</div>`;
 	return a && a.avatar
 		? `<img class="avatar ${cls}" src="${esc(a.avatar)}" alt="">`
 		: `<div class="avatar ${cls}">${esc(((a && a.login) || '?')[0].toUpperCase())}</div>`;
 }
 
+// Порядок аккаунтов: закреплённые — первыми (в своём порядке), затем остальные (порядок можно менять перетаскиванием).
+function orderedAccounts(accounts) {
+	const pins = ui.settings.pinnedAccounts || [], order = ui.settings.accountOrder || [];
+	const rank = a => { const p = pins.indexOf(a.login); if (p >= 0) return p; const o = order.indexOf(a.login); return 1000 + (o >= 0 ? o : 500 + accounts.indexOf(a)); };
+	return accounts.slice().sort((a, b) => rank(a) - rank(b));
+}
+
 function renderAccountBar(accounts, pending) {
+	accounts = orderedAccounts(accounts);
+	const pins = ui.settings.pinnedAccounts || [];
 	const chips = accounts.map(a => {
 		const busy = a.job && !a.job.finished;
 		const cls = a.proxyBad ? 'bad' : a.needsRelogin ? 'warn' : a.status === 'online' ? 'ok' : a.status === 'connecting' ? 'warn' : 'bad';
-		return `<div class="acct ${a.login === ui.active ? 'sel' : ''}" data-acct="${esc(a.login)}">
+		return `<div class="acct ${a.login === ui.active ? 'sel' : ''} ${pins.includes(a.login) ? 'pinned' : ''}" data-acct="${esc(a.login)}">
 			${avatarHtml(a, 'acct-av')}
 			<span class="acct-dot ${cls}"></span>
-			<span class="acct-text" title="${esc(a.login)}"><span class="acct-name">${esc(a.personaName || a.login)}</span>${
-				// у выбранного аккаунта под ником — баланс кошелька, у остальных — логин
-				a.login === ui.active && a.wallet ? `<span class="acct-wallet">${money(a.wallet.balance)} ${esc(a.wallet.currency)}</span>`
-				: a.personaName && a.personaName !== a.login ? `<span class="acct-login">${esc(a.login)}</span>` : ''}</span>
+			<span class="acct-text"><span class="acct-name">${esc(accName(a))}</span>${accSub(a) ? `<span class="acct-login">${esc(accSub(a))}</span>` : ''}</span>
 			${busy ? '<span class="acct-spin"><span class="spinner tiny"></span></span>' : ''}
 			<button class="acct-x" data-logout="${esc(a.login)}" title="${esc(t('logout'))}">×</button>
 		</div>`;
 	}).join('');
 	const adding = pending && ['connecting', 'guard', 'qr'].includes(pending.status);
-	$('accountBar').innerHTML = chips + `<button class="acct add" id="addAcct">${adding ? esc(t('connecting')) : esc(t('add_account'))}</button>`;
+	$('accountBar').innerHTML = chips + `<button class="acct more hidden" id="acctMore"></button><button class="acct add" id="addAcct">${adding ? esc(t('connecting')) : esc(t('add_account'))}</button>`;
+	ui.acctList = accounts;
+	fitAccountBar();
+	if (!$('acctMenu').classList.contains('hidden')) renderAcctMenu();
+}
+
+// Много аккаунтов: показываем те, что помещаются (выбранный — всегда), остальные — в «▾ ещё N».
+function fitAccountBar() {
+	const bar = $('accountBar');
+	const chips = [...bar.querySelectorAll('.acct[data-acct]')];
+	const more = $('acctMore'), add = $('addAcct');
+	chips.forEach(c => c.classList.remove('hidden'));
+	more.classList.toggle('hidden', chips.length < 2);
+	more.textContent = '▾'; more.title = t('acct_manage');
+	if (bar.scrollWidth <= bar.clientWidth + 1) return;
+	const gap = 8;
+	more.classList.remove('hidden'); more.textContent = `▾ ${t('acct_more', { n: 99 })}`;
+	let room = bar.clientWidth - add.offsetWidth - more.offsetWidth - gap * 2;
+	const sel = chips.find(c => c.classList.contains('sel'));
+	if (sel) room -= sel.offsetWidth + gap;
+	let hidden = 0;
+	for (const c of chips) {
+		if (c === sel) continue;
+		if (room >= c.offsetWidth + gap) room -= c.offsetWidth + gap;
+		else { c.classList.add('hidden'); hidden++; }
+	}
+	more.textContent = hidden ? `▾ ${t('acct_more', { n: hidden })}` : '▾';
+}
+window.addEventListener('resize', () => { if (ui.acctList) fitAccountBar(); });
+
+function renderAcctMenu() {
+	const q = ($('acctSearch').value || '').toLowerCase();
+	const pins = ui.settings.pinnedAccounts || [];
+	const list = orderedAccounts(ui.acctList || []).filter(a => !q || `${accName(a)} ${accSub(a)}`.toLowerCase().includes(q));
+	$('acctSearchWrap').classList.toggle('hidden', (ui.acctList || []).length < 7);
+	$('acctMenuList').innerHTML = list.map(a => {
+		const cls = a.proxyBad ? 'bad' : a.needsRelogin ? 'warn' : a.status === 'online' ? 'ok' : a.status === 'connecting' ? 'warn' : 'bad';
+		const pinned = pins.includes(a.login);
+		return `<div class="am-item ${a.login === ui.active ? 'sel' : ''} ${pinned ? 'pinned' : ''}" data-acct="${esc(a.login)}" draggable="${q ? 'false' : 'true'}">
+			<span class="am-drag" title="${esc(t('acct_drag'))}">⋮⋮</span>${avatarHtml(a, 'acct-av')}<span class="acct-dot ${cls}"></span>
+			<div class="am-text"><div class="acct-name">${esc(accName(a))}</div>${accSub(a) ? `<div class="acct-login">${esc(accSub(a))}</div>` : ''}</div>
+			<button class="am-pin ${pinned ? 'on' : ''}" data-pin="${esc(a.login)}" title="${esc(t(pinned ? 'acct_unpin' : 'acct_pin'))}"><svg viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3v2h-4v5l-1 1-1-1v-5H7v-2l3-3-1-6Z" fill="${pinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></button>
+			<button class="acct-x" data-logout="${esc(a.login)}" title="${esc(t('logout'))}">×</button></div>`;
+	}).join('') || `<div class="combo-empty">${esc(t('nothing_found'))}</div>`;
+	$('acctMenuHint').classList.toggle('hidden', Boolean(q));
+}
+// Сохранить порядок (после перетаскивания) и закрепления
+function saveAccountOrder(logins) {
+	const pins = (ui.settings.pinnedAccounts || []).filter(l => logins.includes(l));
+	// закреплённые сохраняют взаимный порядок из перетаскивания
+	const pinned = logins.filter(l => pins.includes(l));
+	saveSetting({ accountOrder: logins.filter(l => !pins.includes(l)), pinnedAccounts: pinned });
+	renderAccountBar(ui.acctList || [], ui.status && ui.status.pending);
+}
+function toggleAcctMenu(open) {
+	const m = $('acctMenu');
+	const show = open == null ? m.classList.contains('hidden') : open;
+	m.classList.toggle('hidden', !show);
+	if (!show) return;
+	const r = $('acctMore').getBoundingClientRect();
+	m.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 380))}px`;
+	m.style.top = `${r.bottom + 6}px`;
+	$('acctSearch').value = '';
+	renderAcctMenu();
+	if (!$('acctSearchWrap').classList.contains('hidden')) $('acctSearch').focus();
 }
 
 function handleActiveJob(active) {
@@ -331,11 +444,9 @@ function handleActiveJob(active) {
 		loadState().catch(() => {});
 		if (ui.op === 'take' && ui.casketId) loadContents(ui.casketId, true).then(renderItems);
 		const secs = Math.max(1, Math.round(((job.ended || Date.now()) - job.started) / 1000));
-		if (!job.error && ui.settings.transferModal !== false) showTransferDone(job, secs);
-		else {
-			toast(job.error ? t('done_err', { e: job.error }) : t('done_ok', { n: fmt(job.done) }), job.error ? 'bad' : 'good');
-			if (!job.error && job.done >= 50) setTimeout(() => nudgeSupport(t('nudge_moved', { n: fmt(job.done), s: secs })), 1500);
-		}
+		if (job.done > 0 && confirmOn('transfer')) showTransferDone(job, secs);
+		else if (job.done > 0) toast(t('td_toast', { n: fmt(job.done), name: job.casketName || '—', s: secs }) + (job.error ? ' · ' + job.error : ''), job.error ? 'bad' : 'good');
+		else toast(t('done_err', { e: job.error || '—' }), 'bad');
 	}
 	ui.lastJobKey[active.login] = key;
 	renderJob(job);
@@ -458,7 +569,7 @@ function renderItems() {
 		return `<div class="item ${n ? 'picked' : ''} ${locked ? 'locked' : ''}">
 			<div class="thumb">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy">` : ''}</div>
 			<div style="min-width:0"><div class="item-name" title="${esc(i.name)}">${esc(i.name)}</div>
-				<div class="item-sub">${ui.op === 'store' ? t('in_inventory') : t('in_casket')}: ${fmt(i.count)}${lock}</div></div>
+				<div class="item-sub">${ui.op === 'store' ? t('in_inventory') : t('in_casket')}: ${fmt(i.count)}${priceTag(i)}${lock}</div></div>
 			${locked ? `<span class="muted small">${esc(t('cant_move'))}</span>` : `
 			<div class="stepper" data-name="${esc(i.name)}" data-max="${i.available}">
 				<button data-step="-1" aria-label="-">−</button>
@@ -469,6 +580,13 @@ function renderItems() {
 		</div>`;
 	}).join('');
 	updateAction();
+}
+
+// Цена у строки предмета: «· 0,25 $ / шт · 24,00 $»
+function priceTag(i) {
+	const c = ui.state && ui.state.priceCurrency;
+	if (!c || i.price == null) return '';
+	return ` · <span class="price-tag">${esc(cur(i.price, c))}${i.count > 1 ? ` ${esc(t('per_item'))} · ${esc(cur(i.price * i.count, c))}` : ''}</span>`;
 }
 
 function setPick(name, value, max) { const n = Math.max(0, Math.min(max, Math.floor(Number(value) || 0))); if (n) ui.picks[name] = n; else delete ui.picks[name]; }
@@ -509,19 +627,53 @@ async function runAction() {
 }
 
 // Итог перекладки — по центру, с OK. «Больше не показывать» -> дальше итог будет обычным уведомлением сбоку.
-async function showTransferDone(job, secs) {
-	const support = !ui.settings.supportHideNudges
-		? `<div class="td-support">♥ ${esc(t('td_support'))} <button class="btn support-btn small" id="tdSupport">${esc(t('support_short'))}</button></div>` : '';
-	const p = miniConfirm({
-		icon: ICON_OK, title: job.kind === 'store' ? t('td_stored', { name: job.casketName || '—' }) : t('td_taken', { name: job.casketName || '—' }),
-		text: t('td_text', { n: fmt(job.done), s: secs, v: (job.done / secs).toFixed(1) }),
-		extra: support, cancel: false, dontShow: true, dontText: t('td_dont_show'),
-	});
-	const b = document.getElementById('tdSupport');
-	if (b) b.onclick = () => { ui.miniAnswer && ui.miniAnswer(true); openSupport(); };
-	const r = await p;
-	if (r.dont) saveSetting({ transferModal: false });
+// Итог перекладки — отдельное окно (показывается всегда после успешной перекладки).
+function showTransferDone(job, secs) {
+	const store = job.kind === 'store';
+	$('tdCard').classList.toggle('take', !store);
+	$('tdTitle').textContent = t(store ? 'td_title_store' : 'td_title_take');
+	$('tdSub').textContent = `«${job.casketName || '—'}»`;
+	$('tdTime').textContent = secs >= 60 ? `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` : t('td_secs', { s: secs });
+	$('tdSpeed').textContent = (job.done / Math.max(1, secs)).toFixed(1);
+	$('tdWarn').classList.toggle('hidden', !job.error);
+	$('tdWarn').textContent = job.failed ? t('td_failed', { n: fmt(job.failed) }) : (job.error || '');
+	// под итогом — просьба: сначала ★ на GitHub (бесплатно, помогает другим найти проект), после неё — поддержка
+	const askStar = !ui.settings.starClicked && job.done >= 20;
+	$('tdSupportWrap').innerHTML = ui.settings.supportHideNudges ? ''
+		: askStar ? `<div class="td-support td-star"><span>${esc(t('td_star'))}</span> <button class="btn star-btn small" id="tdStar">★ ${esc(t('star_btn'))}</button></div>`
+		: `<div class="td-support">♥ ${esc(t('td_support'))} <button class="btn support-btn small" id="tdSupport">${esc(t('support_short'))}</button></div>`;
+	const sup = document.getElementById('tdSupport');
+	if (sup) sup.onclick = () => { closeTransferDone(); openSupport(); };
+	const star = document.getElementById('tdStar');
+	if (star) star.onclick = () => { openExt(GITHUB_URL); saveSetting({ starClicked: true }); closeTransferDone(); toast(t('star_thanks'), 'good'); };
+	// заполненность ящика после перекладки (состояние обновляется в фоне — подхватываем, когда придёт)
+	const fill = () => {
+		const c = ui.state && ui.state.caskets.find(x => x.id === job.casketId);
+		$('tdFill').classList.toggle('hidden', !c);
+		if (!c) return;
+		$('tdFillName').textContent = c.name || '—';
+		$('tdFillN').textContent = `${fmt(c.count)} / ${fmt(c.capacity)}`;
+		$('tdFillBar').style.width = `${Math.min(100, c.count / c.capacity * 100)}%`;
+		$('tdFillBar').className = c.count >= c.capacity * 0.98 ? 'full' : c.count >= c.capacity * 0.85 ? 'warn' : '';
+	};
+	fill(); setTimeout(fill, 900); setTimeout(fill, 2500);
+	// число предметов «набегает»
+	const n = job.done, t0 = performance.now();
+	const step = now => {
+		const k = Math.min(1, (now - t0) / 700);
+		$('tdN').textContent = fmt(Math.round(n * (1 - Math.pow(1 - k, 3))));
+		if (k < 1 && !$('tdModal').classList.contains('hidden')) requestAnimationFrame(step);
+	};
+	$('tdModal').classList.remove('hidden');
+	$('tdCard').classList.remove('anim'); void $('tdCard').offsetWidth; $('tdCard').classList.add('anim');
+	requestAnimationFrame(step);
+	$('tdOk').focus();
 }
+function closeTransferDone() {
+	$('tdModal').classList.add('hidden');
+	if ($('tdDont').checked) { $('tdDont').checked = false; setConfirm('transfer', false); toast(t('td_dont_note'), 'good'); }
+}
+$('tdOk').addEventListener('click', closeTransferDone);
 
 // ============================================================ прогресс операции
 function renderJob(job) {
@@ -577,6 +729,8 @@ function switchTab(tab) {
 	$('guardView').classList.toggle('hidden', tab !== 'guard');
 	if (tab === 'guard') loadGuard();
 	$('overviewView').classList.toggle('hidden', tab !== 'overview');
+	$('pnlView').classList.toggle('hidden', tab !== 'pnl');
+	if (tab === 'pnl') loadPnl();
 	$('casketsView').classList.toggle('hidden', tab !== 'caskets');
 	$('storeView').classList.toggle('hidden', tab !== 'store');
 	$('tradeupView').classList.toggle('hidden', tab !== 'tradeup');
@@ -674,7 +828,7 @@ function renderStoreBalance(cartTotal) {
 	$('storeBalance').classList.toggle('hidden', !has);
 	if (!has) return;
 	if (cartTotal == null) cartTotal = cartLines().reduce((n, l) => n + l.qty * l.unit, 0);
-	$('storeWallet').textContent = `${money(st.balance)} ${st.currency}`;
+	$('storeWallet').textContent = walletText({ balance: st.balance, currency: st.currency });
 	const left = st.balance - cartTotal;
 	$('storeAfter').classList.toggle('hidden', !cartTotal);
 	$('storeAfter').textContent = left >= 0 ? t('after_cart', { amount: `${money(left)} ${st.currency}` }) : t('not_enough', { amount: `${money(-left)} ${st.currency}` });
@@ -693,15 +847,30 @@ async function loadSettings() {
 	try { ui.settings = await api('/api/settings'); } catch (e) { /* по умолчанию */ }
 	$('giftToggle').checked = ui.settings.autoAcceptGifts;
 	$('sideNav').classList.toggle('collapsed', Boolean(ui.settings.navCollapsed));
+	applyStreamer();
 	if (ui.settings.lang && ui.settings.lang !== LANG && window.I18N.dict[ui.settings.lang]) setLang(ui.settings.lang, false);
 	updateCartBtn();
 	maybeWelcome();
 }
 
 function openSettings() {
-	$('stickerConfirmToggle').checked = ui.settings.stickerConfirm !== false;
-	$('nudgeToggle').checked = !ui.settings.supportHideNudges;
-	$('transferModalToggle').checked = ui.settings.transferModal !== false;
+	renderConfirms();
+	api('/api/proxies').then(l => { ui.proxies = l; $('proxyCount').textContent = `${l.filter(a => a.proxy).length}/${l.length}`; }).catch(() => {});
+	setPane(ui.setPane || 'general');
+	if (window.desktop && window.desktop.version) window.desktop.version().then(v => { $('setVersion').textContent = `Caskit ${v}`; }).catch(() => {});
+	$('updateMode').value = ui.settings.updateMode || 'ask';
+	$('streamerToggle').checked = streamer(); $('streamerMoney').checked = Boolean(ui.settings.streamerMoney);
+	$('streamerMoneyRow').classList.toggle('off', !streamer());
+	$('updateRow').classList.toggle('hidden', !window.desktop);
+	// сборка без обновлений (собрана с флагом noupdate) — переключатель не нужен
+	if (window.desktop && window.desktop.updatesDisabled) window.desktop.updatesDisabled().then(off => { $('updateCtl').classList.toggle('hidden', Boolean(off)); $('updateOff').classList.toggle('hidden', !off); }).catch(() => {});
+	$('priceToggle').checked = ui.settings.priceEnabled !== false;
+	$('priceOpts').classList.toggle('hidden', ui.settings.priceEnabled === false);
+	$('priceSource').value = ui.settings.priceSource || 'steam';
+	const pc = ui.settings.priceCurrency || 'auto';
+	$('priceCurrency').innerHTML = `<option value="auto">${esc(t('price_cur_auto'))}</option>` + PRICE_CURRENCIES.map(c => `<option value="${c}">${c}</option>`).join('');
+	$('priceCurrency').value = pc;
+	$('priceFeeToggle').checked = Boolean(ui.settings.priceAfterFee);
 	$('settingsModal').classList.remove('hidden');
 }
 
@@ -732,6 +901,171 @@ function miniConfirm({ icon = ICON_Q, warn = false, title, text, extra = '', ok 
 	});
 }
 
+// ============================================================ обновления: только с согласия пользователя
+function onUpdateEvent(u) {
+	if (u.type === 'available') {
+		ui.update = u;
+		$('updTitle').textContent = t('upd_title', { v: u.version });
+		$('updText').textContent = t(u.canInstall ? 'upd_text' : 'upd_text_manual', { cur: ui.appVersion || '' });
+		$('updGo').textContent = t(u.canInstall ? 'upd_go' : 'upd_download');
+		$('updGo').disabled = false;
+		$('updBar').classList.add('hidden');
+		$('updModal').classList.remove('hidden');
+	} else if (u.type === 'progress') {
+		$('updBar').classList.remove('hidden');
+		$('updBar').querySelector('i').style.width = `${u.percent}%`;
+		$('updGo').textContent = `${t('upd_downloading')} ${u.percent}%`;
+	} else if (u.type === 'ready') {
+		ui.updateReady = true;
+		$('updBar').querySelector('i').style.width = '100%';
+		$('updGo').disabled = false;
+		$('updGo').textContent = t('update_restart');
+		$('updModal').classList.remove('hidden');
+	} else if (u.type === 'error') {
+		$('updGo').disabled = false;
+		$('updGo').textContent = t('upd_download');
+		if (ui.update) ui.update.canInstall = false;  // не получилось само — предложим скачать со страницы релиза
+		toast(t('upd_error'), 'bad');
+	}
+}
+$('updGo').addEventListener('click', async () => {
+	const u = ui.update;
+	if (!u) return;
+	if (ui.updateReady) return window.desktop.installUpdate();
+	if (!u.canInstall) { openExt(u.url); $('updModal').classList.add('hidden'); return; }
+	$('updGo').disabled = true;
+	$('updGo').textContent = t('upd_downloading');
+	try { await window.desktop.downloadUpdate(); } catch (e) { onUpdateEvent({ type: 'error' }); }
+});
+$('updLater').addEventListener('click', () => $('updModal').classList.add('hidden'));
+$('updSkip').addEventListener('click', () => { if (ui.update) saveSetting({ skipVersion: ui.update.version }); $('updModal').classList.add('hidden'); });
+$('updNotes').addEventListener('click', e => { e.preventDefault(); if (ui.update) openExt(ui.update.url); });
+$('updateMode').addEventListener('change', e => saveSetting({ updateMode: e.target.value }));
+$('updateCheck').addEventListener('click', async () => {
+	if (!window.desktop || !window.desktop.checkUpdates) return;
+	const b = $('updateCheck'); b.disabled = true;
+	try {
+		const r = await window.desktop.checkUpdates();
+		if (r.error) toast(r.error, 'bad');
+		else if (!r.newer) toast(t('upd_latest', { v: r.current }), 'good');
+	} finally { b.disabled = false; }
+});
+
+// ============================================================ прокси аккаунтов (настройки)
+// Разделы настроек: меню слева, содержимое справа
+function setPane(name) {
+	ui.setPane = name;
+	document.querySelectorAll('#settingsModal .set-nav-i').forEach(b => b.classList.toggle('active', b.dataset.pane === name));
+	document.querySelectorAll('#settingsModal .set-pane').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== name));
+	const btn = document.querySelector(`#settingsModal .set-nav-i[data-pane="${name}"] span`);
+	$('setPaneTitle').textContent = btn ? btn.textContent : '';
+	if (name === 'confirms') renderConfirms();
+	if (name === 'proxies') openProxies();
+	if (name === 'about') renderSupport($('setSupportList'));
+}
+document.querySelector('#settingsModal .set-nav').addEventListener('click', e => { const b = e.target.closest('[data-pane]'); if (b) setPane(b.dataset.pane); });
+
+async function openProxies() {
+	$('pxList').innerHTML = Array.from({ length: 3 }, () => '<div class="skeleton" style="height:58px"></div>').join('');
+	try { ui.proxies = await api('/api/proxies'); renderProxies(); } catch (e) { $('pxList').innerHTML = `<p class="muted small">${esc(e.message)}</p>`; }
+}
+function pxStatus(a) {
+	if (!a.proxy) return `<span class="px-pill">${esc(t('px_direct'))}</span>`;
+	const st = a.status;
+	if (!st) return `<span class="px-pill">${esc(t('px_unchecked'))}</span>`;
+	return st.ok ? `<span class="px-pill ok" title="${esc(new Date(st.checked).toLocaleString())}">${esc(t('px_ok'))}</span>`
+		: `<span class="px-pill bad" title="${esc(st.error || '')}">${esc(t('px_bad'))}</span>`;
+}
+function renderProxies() {
+	const list = ui.proxies || [];
+	$('pxList').innerHTML = list.length ? list.map(a => `<div class="px-row" data-px="${esc(a.login)}">
+		<div class="px-acc">${avatarHtml(a, 'acct-av')}<div><div class="strong">${esc(accName(a))}</div><div class="muted small">${esc(accSub(a) || (streamer() ? '' : a.login))}${a.online ? ' · ' + esc(t('px_online')) : ''}</div></div></div>
+		<input class="px-in" value="${esc(a.proxy)}" placeholder="${esc(t('px_none_ph'))}" spellcheck="false" ${a.saved ? '' : 'disabled title="' + esc(t('px_not_saved')) + '"'}>
+		${pxStatus(a)}
+		<div class="px-actions">
+			<button class="btn primary small hidden" data-pxsave>${esc(t('pnl_save'))}</button>
+			${a.proxy ? `<button class="btn ghost small" data-pxcheck>${esc(t('upd_check'))}</button>` : ''}
+			${a.online && a.saved && (a.active || '') !== (a.proxy || '') ? `<button class="btn ghost small" data-pxrelog title="${esc(t('px_relog_hint'))}">${esc(t('px_relog'))}</button>` : ''}
+		</div>
+	</div>`).join('') : `<p class="muted small">${esc(t('px_no_accounts'))}</p>`;
+	const n = list.filter(a => a.proxy).length;
+	$('proxyCount').textContent = `${n}/${list.length}`;
+}
+$('pxList').addEventListener('input', e => {
+	const row = e.target.closest('[data-px]'); if (!row) return;
+	const a = (ui.proxies || []).find(x => x.login === row.dataset.px);
+	row.querySelector('[data-pxsave]').classList.toggle('hidden', e.target.value.trim() === (a && a.proxy || ''));
+});
+$('pxList').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.classList.contains('px-in')) { const b = e.target.closest('[data-px]').querySelector('[data-pxsave]'); if (b) b.click(); } });
+$('pxList').addEventListener('click', async e => {
+	const row = e.target.closest('[data-px]'); if (!row) return;
+	const login = row.dataset.px;
+	const btn = e.target.closest('button'); if (!btn) return;
+	btn.disabled = true;
+	try {
+		if (btn.hasAttribute('data-pxsave')) {
+			const r = await api('/api/proxies/set', { login, proxy: row.querySelector('.px-in').value, protocol: $('pxProto').value });
+			toast(r.status && !r.status.ok ? t('px_saved_bad', { e: r.status.error || '' }) : t(r.needsRelogin ? 'px_saved_relog' : 'px_saved'), r.status && !r.status.ok ? 'bad' : 'good');
+		} else if (btn.hasAttribute('data-pxcheck')) {
+			await api('/api/proxies/check', { login });
+		} else if (btn.hasAttribute('data-pxrelog')) {
+			// переподключение с новым прокси: выходим и входим снова сохранённым токеном
+			await api('/api/logout', { account: login });
+			await api('/api/login', { mode: 'saved', login });
+			toast(t('px_relogging', { a: login }), 'good');
+			poll(true);
+		}
+		ui.proxies = await api('/api/proxies'); renderProxies();
+	} catch (err) { toast(err.message, 'bad'); btn.disabled = false; }
+});
+$('pxCheckAll').addEventListener('click', async () => {
+	$('pxCheckAll').disabled = true;
+	try { ui.proxies = await api('/api/proxies/check', {}); renderProxies(); } catch (e) { toast(e.message, 'bad'); }
+	$('pxCheckAll').disabled = false;
+});
+$('pxBulkGo').addEventListener('click', async () => {
+	try {
+		const r = await api('/api/proxies/bulk', { list: $('pxBulkList').value, protocol: $('pxProto').value, target: $('pxTarget').value });
+		toast(t('px_bulk_done', { n: r.assigned, p: r.proxies }), 'good');
+		$('pxBulkList').value = '';
+		ui.proxies = await api('/api/proxies'); renderProxies();
+		ui.proxies = await api('/api/proxies/check', {}); renderProxies();  // проверка — следом, может занять до минуты
+	} catch (e) { toast(e.message, 'bad'); }
+});
+
+// ============================================================ подтверждения (общий список в настройках)
+// Отключаемые подтверждения: «больше не показывать» в окне выключает их, вернуть можно в «Настройки → Подтверждения».
+// Оплата, удаление наклейки и отдача предметов в обмене подтверждаются всегда — их здесь нет.
+const CONFIRMS = ['transfer', 'nudge', 'inspect', 'sticker', 'scrape', 'tradeup', 'sell', 'mremove', 'armory', 'pnledit'];
+function confirmOn(k) {
+	if (k === 'nudge') return !ui.settings.supportHideNudges;  // напоминания о поддержке — своя настройка
+	if (k === 'sticker' && ui.settings.stickerConfirm === false) return false;  // старая настройка
+	return ((ui.settings.confirms || {})[k]) !== false;
+}
+function setConfirm(k, on) {
+	if (k === 'nudge') return saveSetting({ supportHideNudges: !on });
+	const confirms = { ...(ui.settings.confirms || {}), [k]: Boolean(on) };
+	return saveSetting(k === 'sticker' ? { confirms, stickerConfirm: Boolean(on) } : { confirms });
+}
+async function askConfirm(key, opts) {
+	if (!confirmOn(key)) return { ok: true };
+	const r = await miniConfirm({ ...opts, dontShow: true });
+	if (r.ok && r.dont) setConfirm(key, false);
+	return r;
+}
+function renderConfirms() {
+	$('confirmList').innerHTML = CONFIRMS.map(k => `<label class="switch-row">
+		<span><span class="strong">${esc(t('cf_' + k))}</span><span class="muted small block-text">${esc(t('cf_' + k + '_desc'))}</span></span>
+		<input type="checkbox" class="switch" data-cf="${k}" ${confirmOn(k) ? 'checked' : ''}></label>`).join('');
+	$('confirmCount').textContent = `${CONFIRMS.filter(confirmOn).length}/${CONFIRMS.length}`;
+}
+// «Осмотреть в игре» запускает CS2 через Steam — сначала спрашиваем
+async function launchInspect(link) {
+	if (!link) return;
+	const r = await askConfirm('inspect', { icon: ICON_Q, title: t('inspect_launch_title'), text: t('inspect_launch_text'), ok: t('inspect_launch_ok') });
+	if (r.ok) openExt(link);
+}
+
 // ============================================================ оформление покупки
 // Каждая позиция корзины — отдельная транзакция Steam: заказ в GC → Steam присылает счёт →
 // пользователь подтверждает (или сразу, если включена «Быстрая покупка») → оплата и выдача предметов.
@@ -744,8 +1078,8 @@ function openCheckout(lines) {
 	ui.co = { account: ui.active, lines: lines.map(l => ({ ...l, bought: 0, status: 'wait' })), idx: 0, busy: false };
 	const acc = activeAccount() || { login: ui.active };
 	$('coAvatar').outerHTML = avatarHtml(acc).replace('class="avatar', 'id="coAvatar" class="avatar');
-	$('coLogin').textContent = acc.personaName || ui.active || '';
-	$('coBalance').textContent = ui.store && ui.store.balance != null ? `(${money(ui.store.balance)} ${ui.store.currency})` : '';
+	$('coLogin').textContent = accName(acc);
+	$('coBalance').textContent = ui.store && ui.store.balance != null ? `(${walletText({ balance: ui.store.balance, currency: ui.store.currency })})` : '';
 	$('checkoutModal').classList.remove('hidden');
 	runCheckout();
 }
@@ -829,7 +1163,7 @@ async function runCheckout() {
 			try { order = await api('/api/store/init', { account: co.account, def: line.def, count: line.qty - line.bought }); }
 			catch (e) { return coFail(line, e.message, false); }
 			co.currency = order.currency;
-			if (order.balance != null) $('coBalance').textContent = `(${money(order.balance)} ${order.currency})`;
+			if (order.balance != null) $('coBalance').textContent = `(${walletText({ balance: order.balance, currency: order.currency })})`;
 			co.busy = false;
 			const ok = await coAskAuthorize(order, line);
 			co.busy = true;
@@ -887,16 +1221,24 @@ async function buyContainer() {
 		if (!ui.store) ui.store = await apiGet('/api/store/catalog');
 		const it = storeItem(1201);
 		if (!it) throw new Error(t('unavailable'));
-		const qty = await askQuantity(it.name, it.price);
+		const qty = await askQuantity(it.name, it.price, it.image);
 		if (qty) openCheckout([{ def: it.def, name: it.name, image: it.image, unit: it.price, qty }]);
 	} catch (e) { toast(e.message, 'bad'); }
 }
 
-function askQuantity(name, unit) {
+function askQuantity(name, unit, image) {
 	return new Promise(resolve => {
+		const c = ui.store ? ui.store.currency : '';
 		$('qtyTitle').textContent = name;
-		$('qtyUnit').textContent = t('qty_unit', { price: fmt(unit), currency: ui.store ? ui.store.currency : '' });
+		$('qtyUnit').textContent = t('qty_unit', { price: fmt(unit), currency: c });
+		$('qtyImg').innerHTML = image ? `<img src="${esc(image.replace(/\/\d+fx\d+f$/, '/256fx256f'))}" alt="">` : '';
+		$('qtyImg').classList.toggle('hidden', !image);
 		$('qtyInput').value = '1';
+		const total = () => { const n = Math.max(1, Math.min(100, parseInt($('qtyInput').value, 10) || 1)); $('qtyTotal').textContent = `${money(n * unit)} ${c}`; };
+		total();
+		$('qtyInput').oninput = total;
+		$('qtyMinus').onclick = () => { $('qtyInput').value = Math.max(1, (parseInt($('qtyInput').value, 10) || 1) - 1); total(); };
+		$('qtyPlus').onclick = () => { $('qtyInput').value = Math.min(100, (parseInt($('qtyInput').value, 10) || 1) + 1); total(); };
 		$('qtyModal').classList.remove('hidden'); $('qtyInput').focus(); $('qtyInput').select();
 		const close = val => { $('qtyModal').classList.add('hidden'); $('qtyOk').onclick = null; $('qtyCancel').onclick = null; resolve(val); };
 		$('qtyOk').onclick = () => { const n = parseInt($('qtyInput').value, 10); close(n >= 1 ? Math.min(n, 100) : 0); };
@@ -950,8 +1292,43 @@ $('accountBar').addEventListener('click', e => {
 	const chip = e.target.closest('[data-acct]');
 	if (add) { ui.addingAccount = true; ui.maFile = null; setMode('qr'); ui.qr.state = 'idle'; renderLoginFlow(ui.status && ui.status.pending, true); return; }
 	if (x) { const login = x.dataset.logout; api('/api/logout', { account: login }).then(() => { if (ui.active === login) ui.active = null; poll(true); }); return; }
+	if (e.target.closest('#acctMore')) { toggleAcctMenu(); return; }
 	if (chip && chip.dataset.acct !== ui.active) { ui.active = chip.dataset.acct; ui._freshActive = true; renderAccounts(ui.status); }
 });
+$('acctMenu').addEventListener('click', e => {
+	const pin = e.target.closest('[data-pin]');
+	if (pin) {
+		const l = pin.dataset.pin, pins = (ui.settings.pinnedAccounts || []).slice();
+		const i = pins.indexOf(l);
+		if (i >= 0) pins.splice(i, 1); else pins.push(l);
+		saveSetting({ pinnedAccounts: pins });
+		ui.settings.pinnedAccounts = pins;
+		renderAccountBar(ui.acctList || [], ui.status && ui.status.pending);
+		return;
+	}
+	const x = e.target.closest('[data-logout]');
+	if (x) { const login = x.dataset.logout; api('/api/logout', { account: login }).then(() => { if (ui.active === login) ui.active = null; poll(true); }); return; }
+	const it = e.target.closest('[data-acct]');
+	if (it) { toggleAcctMenu(false); if (it.dataset.acct !== ui.active) { ui.active = it.dataset.acct; ui._freshActive = true; renderAccounts(ui.status); } }
+});
+$('acctSearch').addEventListener('input', renderAcctMenu);
+// перетаскивание в списке: новый порядок аккаунтов (закреплённые всё равно остаются первыми)
+let acctDrag = null;
+$('acctMenuList').addEventListener('dragstart', e => { const it = e.target.closest('.am-item'); if (!it) return; acctDrag = it; it.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+$('acctMenuList').addEventListener('dragover', e => {
+	if (!acctDrag) return;
+	e.preventDefault();
+	const over = e.target.closest('.am-item');
+	if (!over || over === acctDrag) return;
+	const r = over.getBoundingClientRect();
+	over.parentNode.insertBefore(acctDrag, e.clientY < r.top + r.height / 2 ? over : over.nextSibling);
+});
+$('acctMenuList').addEventListener('dragend', () => {
+	if (!acctDrag) return;
+	acctDrag.classList.remove('dragging'); acctDrag = null;
+	saveAccountOrder([...$('acctMenuList').querySelectorAll('.am-item')].map(x => x.dataset.acct));
+});
+document.addEventListener('mousedown', e => { if (!$('acctMenu').classList.contains('hidden') && !e.target.closest('#acctMenu, #acctMore')) toggleAcctMenu(false); });
 
 $('sideNav').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) switchTab(b.dataset.tab); });
 $('guardTopBtn').addEventListener('click', () => switchTab('guard'));
@@ -1034,15 +1411,35 @@ $('buyBtn').addEventListener('click', buyContainer);
 $('emptyBuy').addEventListener('click', buyContainer);
 $('settingsBtn').addEventListener('click', openSettings);
 $('settingsClose').addEventListener('click', () => $('settingsModal').classList.add('hidden'));
-$('stickerConfirmToggle').addEventListener('change', e => saveSetting({ stickerConfirm: e.target.checked }));
-$('nudgeToggle').addEventListener('change', e => saveSetting({ supportHideNudges: !e.target.checked }));
-$('transferModalToggle').addEventListener('change', e => saveSetting({ transferModal: e.target.checked }));
+$('confirmList').addEventListener('change', async e => { const k = e.target.dataset.cf; if (k) { await setConfirm(k, e.target.checked); renderConfirms(); } });
+// Цены: после изменения настроек пересчитываем стоимость (на открытом «Обзоре» — сразу)
+async function savePriceSetting(patch) {
+	await saveSetting(patch);
+	$('priceOpts').classList.toggle('hidden', ui.settings.priceEnabled === false);
+	ui.value = null; ui.contents = {}; ui.pnl = null;
+	if (ui.tab === 'pnl') loadPnl();
+	if (ui.tab === 'overview') loadValue();
+	if (ui.state) loadState().catch(() => {});
+}
+$('priceToggle').addEventListener('change', e => savePriceSetting({ priceEnabled: e.target.checked }));
+$('streamerToggle').addEventListener('change', e => toggleStreamer(e.target.checked));
+$('streamerMoney').addEventListener('change', async e => { await saveSetting({ streamerMoney: e.target.checked }); applyStreamer(); });
+$('streamerBadge').addEventListener('click', () => toggleStreamer(false));
+// Ctrl+Shift+H — режим стримера (работает в любом окне приложения)
+document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyH') { e.preventDefault(); toggleStreamer(); } });
+$('priceSource').addEventListener('change', e => savePriceSetting({ priceSource: e.target.value }));
+$('priceCurrency').addEventListener('change', e => savePriceSetting({ priceCurrency: e.target.value }));
+$('priceFeeToggle').addEventListener('change', e => savePriceSetting({ priceAfterFee: e.target.checked }));
 document.addEventListener('keydown', e => {
 	if (e.key !== 'Escape') return;
 	if (ui.tourStep != null) return endTour();
 	if (ui.miniAnswer) return ui.miniAnswer(false);
 	if (!$('supportModal').classList.contains('hidden')) return $('supportModal').classList.add('hidden');
+	if (!$('acctMenu').classList.contains('hidden')) return toggleAcctMenu(false);
+	if (!$('ivModal').classList.contains('hidden')) return $('ivModal').classList.add('hidden');
 	if (!$('settingsModal').classList.contains('hidden')) return $('settingsModal').classList.add('hidden');
+	if (!$('tdModal').classList.contains('hidden')) return closeTransferDone();
+	if (!$('pnlModal').classList.contains('hidden')) return $('pnlModal').classList.add('hidden');
 	if (ui.co && ui.co.answer) return ui.co.answer(false);
 	if (ui.co && !ui.co.busy) closeCheckout();
 });
@@ -1057,6 +1454,7 @@ async function loadOverview() {
 		else ui.overview = await apiGet('/api/overview');
 		renderOverview();
 		loadStorageTop();
+		loadValue();
 	} catch (e) { toast(e.message, 'bad'); }
 }
 
@@ -1080,6 +1478,7 @@ const ovTile = (label, value, sub = '', meter = null, cls = '') => `<div class="
 function walletSum(list) {
 	const by = {};
 	for (const o of list) if (o.wallet) by[o.wallet.currency] = (by[o.wallet.currency] || 0) + o.wallet.balance;
+	if (streamer() && Object.keys(by).length) return '•••';
 	return Object.entries(by).map(([c, v]) => `${money(v)} ${esc(c)}`).join('<br>') || '—';
 }
 
@@ -1098,8 +1497,6 @@ function renderOverview() {
 		ovTile(t('inventory'), fmt(inv), '', { pct: lim ? inv / lim * 100 : 0, text: `${fmt(inv)} / ${fmt(lim)}` }),
 		ovTile(t('ov_storage'), fmt(st), t('ov_caskets', { n: sum('casketCount') }), { pct: cap ? st / cap * 100 : 0, text: `${fmt(st)} / ${fmt(cap)}` }),
 		ovTile(t('wallet_label'), walletSum(list), scope === 'all' ? t('ov_accounts_n', { n: list.length }) : '', null, 'good'),
-		ovTile(t('ov_protected'), fmt(sum('protectedCount')), t('ov_protected_sub')),
-		ovTile(t('ov_tradeup_ready'), fmt(sum('tradeUpReady')), t('ov_tradeup_sub')),
 	].join('');
 	const merge = key => { const out = {}; for (const o of list) for (const [k, v] of Object.entries(o[key] || {})) out[k] = (out[k] || 0) + v; return out; };
 	const byRarity = merge('byRarity'), byKind = merge('byKind');
@@ -1116,11 +1513,11 @@ function renderOverview() {
 		const rows = (ui.overviewAll || []);
 		$('ovAccounts').innerHTML = `<div class="section-title" style="margin-bottom:10px">${esc(t('ov_accounts'))}</div>
 			<table class="mt"><thead><tr><th>${esc(t('ov_account'))}</th><th>${esc(t('inventory'))}</th><th class="num">${esc(t('ov_storage'))}</th><th class="num">${esc(t('ov_total'))}</th><th class="num">${esc(t('wallet_label'))}</th></tr></thead><tbody>
-			${rows.map(o => o.inventoryLimit ? `<tr><td><div class="it">${avatarHtml(o, 'acct-av')}<div><div>${esc(o.personaName || o.login)}</div><div class="sub">${esc(o.login)}</div></div></div></td>
+			${rows.map(o => o.inventoryLimit ? `<tr><td><div class="it">${avatarHtml(o, 'acct-av')}<div><div>${esc(accName(o))}</div>${accSub(o) ? `<div class="sub">${esc(accSub(o))}</div>` : ''}</div></div></td>
 				<td><div class="ov-mini">${fmt(o.inventoryCount)} / ${fmt(o.inventoryLimit)}<div class="meter"><i style="width:${o.inventoryCount / o.inventoryLimit * 100}%"></i></div></div></td>
 				<td class="num">${fmt(o.stored)} <span class="sub">· ${fmt(o.casketCount)} ${esc(t('caskets').toLowerCase())}</span></td><td class="num">${fmt(o.inventoryCount + o.stored)}</td>
-				<td class="num good-text">${o.wallet ? `${money(o.wallet.balance)} ${esc(o.wallet.currency)}` : '—'}</td></tr>`
-				: `<tr><td>${esc(o.login)}</td><td colspan="4" class="muted">${esc(o.error || t('offline'))}</td></tr>`).join('')}
+				<td class="num good-text">${o.wallet ? esc(walletText(o.wallet)) : '—'}</td></tr>`
+				: `<tr><td>${esc(loginName(o.login))}</td><td colspan="4" class="muted">${esc(o.error || t('offline'))}</td></tr>`).join('')}
 			</tbody></table>`;
 	}
 }
@@ -1138,8 +1535,445 @@ async function loadStorageTop() {
 	} catch (e) { $('ovStorageTop').innerHTML = `<p class="muted small">${esc(e.message)}</p>`; }
 }
 
-$('ovScope').addEventListener('click', e => { const b = e.target.closest('[data-scope]'); if (b) { ui.ovScope = b.dataset.scope; renderOverview(); loadOverview(); } });
+$('ovScope').addEventListener('click', e => { const b = e.target.closest('[data-scope]'); if (b) { ui.ovScope = b.dataset.scope; ui.value = null; renderOverview(); loadOverview(); } });
 $('ovRefresh').addEventListener('click', loadOverview);
+
+// ============================================================ стоимость (цены) и история портфеля
+const PRICE_CURRENCIES = ['USD', 'EUR', 'GBP', 'RUB', 'UAH', 'KZT', 'PLN', 'BRL', 'TRY', 'CNY', 'JPY', 'KRW', 'INR', 'CAD', 'AUD', 'NZD', 'CHF',
+	'SEK', 'NOK', 'DKK', 'CZK', 'HUF', 'RON', 'BGN', 'MXN', 'ARS', 'CLP', 'COP', 'PEN', 'UYU', 'CRC', 'ZAR', 'ILS', 'AED', 'SAR', 'QAR', 'KWD',
+	'SGD', 'HKD', 'TWD', 'THB', 'VND', 'IDR', 'MYR', 'PHP'];
+function cur(v, c, signed = false) {
+	if (v == null) return '—';
+	try {
+		return new Intl.NumberFormat(LANG === 'zh' ? 'zh-CN' : LANG, { style: 'currency', currency: c, signDisplay: signed ? 'exceptZero' : 'auto',
+			minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+	} catch (e) { return `${signed && v > 0 ? '+' : ''}${money(v)} ${c}`; }
+}
+const pctFmt = x => (x == null ? '' : `${x > 0 ? '+' : ''}${(x * 100).toFixed(Math.abs(x) < 0.1 ? 1 : 0)}%`);
+const signCls = x => (x > 0 ? 'up' : x < 0 ? 'down' : '');
+const shortDate = d => new Date(`${d}T12:00:00`).toLocaleDateString(LANG === 'zh' ? 'zh-CN' : LANG, { day: 'numeric', month: 'short' });
+
+async function loadValue() {
+	const all = (ui.ovScope || 'one') === 'all';
+	const off = ui.settings.priceEnabled === false;
+	$('pvOff').classList.toggle('hidden', !off);
+	$('pvBox').classList.toggle('hidden', off);
+	$('pvPeriod').classList.toggle('hidden', off);
+	if (off) return;
+	const key = all ? '*' : ui.active;
+	if (!ui.value || ui.valueKey !== key) {
+		// пока считаем (первый раз читаются все ящики — несколько секунд) — заметная анимация вместо пустоты
+		const skel = n => Array.from({ length: n }, () => '<div class="skeleton pv-row-skel"></div>').join('');
+		$('pvKpi').innerHTML = Array.from({ length: 4 }, () => '<div class="skeleton pv-kpi-skel"></div>').join('');
+		$('pvFoot').innerHTML = ''; $('pvLegend').innerHTML = '';
+		$('pvChart').innerHTML = '<div class="skeleton pv-chart-skel"></div>';
+		for (const id of ['pvUp', 'pvDown', 'pvTop']) $(id).innerHTML = skel(5);
+		for (const id of ['pvBars', 'pvKinds']) $(id).innerHTML = '<div class="skeleton pv-donut-skel"></div>';
+	} else $('pvBox').classList.add('pv-refreshing');
+	const url = all ? '/api/overview/value?all=1' : '/api/overview/value';
+	const same = () => key === ((ui.ovScope || 'one') === 'all' ? '*' : ui.active);
+	const get = q => (all ? api(url + q.replace('?', '&')) : apiGet(url + q));
+	try {
+		// 1) последний расчёт — сразу (из памяти/диска), 2) свежий — в фоне
+		if (!ui.value || ui.valueKey !== key) {
+			const c = await get('?fast=1');
+			if (!same()) return;
+			if (c.disabled) { $('pvOff').classList.remove('hidden'); $('pvBox').classList.add('hidden'); return; }
+			if (c.cached) { ui.value = c; ui.valueKey = key; renderValue(); $('pvBox').classList.add('pv-refreshing'); }
+			else { ui.value = c; ui.valueKey = key; renderValue(); $('pvBox').classList.remove('pv-refreshing'); return; }
+		}
+		const r = await get('');
+		if (!same()) return;
+		if (r.disabled) { $('pvOff').classList.remove('hidden'); $('pvBox').classList.add('hidden'); return; }
+		ui.value = r; ui.valueKey = key;
+		renderValue();
+	} catch (e) {
+		// одна повторная попытка (например, Steam на секунду отвалился), потом — ошибка вместо пустых заготовок
+		if (same() && !loadValue.retried) { loadValue.retried = true; setTimeout(() => { loadValue().finally(() => { loadValue.retried = false; }); }, 1500); return; }
+		if (!ui.value || ui.valueKey !== key) $('pvKpi').innerHTML = `<p class="muted small">${esc(e.message)}</p>`; else toast(e.message, 'bad');
+	}
+	$('pvBox').classList.remove('pv-refreshing');
+}
+
+function pvRows(list, c, mode) {
+	return list.length ? list.map(i => `<div class="ov-top-row">
+		<div class="thumb">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy">` : ''}</div>
+		<div class="grow" title="${esc(i.name)}">${esc(i.name)}</div>
+		${mode === 'mover' ? `<span class="muted small">${cur(i.was, c)} → ${cur(i.now, c)}${i.count > 1 ? ` · ×${fmt(i.count)}` : ''}</span>
+			<b class="${signCls(i.delta)}">${cur(i.delta, c, true)}</b>`
+		: `<span class="muted small">×${fmt(i.count)}</span>${mode === 'topbar' ? `<span class="pv-minibar"><i style="width:${Math.max(2, i.share * 100).toFixed(1)}%"></i></span>` : ''}<b>${cur(i.value, c)}</b>`}
+	</div>`).join('') : `<p class="muted small">—</p>`;
+}
+
+// Линейный график стоимости (SVG без библиотек); invested — пунктир «вложено» (по записям «Портфеля»).
+function pvChart(points, c, invested) {
+	if (points.length < 2) return `<div class="pv-chart-empty muted small">${esc(t('pv_history_empty'))}</div>`;
+	const W = 1000, H = 210, pad = 8;
+	const vals = points.map(p => p.value);
+	// «вложено» рисуем, только если оно в одном масштабе со стоимостью — иначе линия стоимости станет плоской
+	let inv = invested && invested.length === points.length ? invested.map(p => p.value) : null;
+	const vSpan = Math.max(...vals) - Math.min(...vals);
+	if (inv && (Math.min(...inv) < Math.min(...vals) - Math.max(vSpan, Math.max(...vals) * 0.05) * 1.5 || Math.max(...inv) > Math.max(...vals) + Math.max(vSpan, Math.max(...vals) * 0.05) * 1.5)) inv = null;
+	const all = inv ? vals.concat(inv) : vals;
+	let lo = Math.min(...all), hi = Math.max(...all);
+	if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+	const x = i => pad + i / (points.length - 1) * (W - 2 * pad);
+	const y = v => pad + (1 - (v - lo) / (hi - lo)) * (H - 2 * pad);
+	const path = arr => arr.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+	const line = path(vals);
+	const area = `${line} L${x(points.length - 1).toFixed(1)},${H} L${x(0).toFixed(1)},${H} Z`;
+	const rising = vals[vals.length - 1] >= vals[0];
+	const dots = points.map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="${points.length > 40 ? 0 : 3}"><title>${esc(shortDate(p.d))}: ${esc(cur(p.value, c))}${inv ? ` · ${esc(t('pv_invested'))}: ${esc(cur(inv[i], c))}` : ''}</title></circle>`).join('');
+	const ticks = [0, 0.25, 0.5, 0.75, 1].map(k => Math.round(k * (points.length - 1))).filter((v, i, a) => a.indexOf(v) === i);
+	return `<div class="pv-plot"><svg class="pv-svg ${rising ? 'up' : 'down'}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+		<defs><linearGradient id="pvGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".28"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
+		<path d="${area}" fill="url(#pvGrad)" stroke="none"/>
+		${inv ? `<path d="${path(inv)}" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="6 6" vector-effect="non-scaling-stroke"/>` : ''}
+		<path d="${line}" fill="none" stroke="currentColor" stroke-width="2.2" vector-effect="non-scaling-stroke"/>${dots}</svg>
+		<span class="pv-y hi">${esc(cur(hi, c))}</span><span class="pv-y lo">${esc(cur(lo, c))}</span></div>
+		<div class="pv-axis muted small">${ticks.map(i => `<span>${esc(shortDate(points[i].d))}</span>`).join('')}</div>`;
+}
+
+// Кольцевая диаграмма + легенда
+const PV_COLORS = ['#4fb3ff', '#9b6bff', '#f2994a', '#2ec16b', '#e05d7c', '#e6c229', '#8a93a6'];
+const KIND_COLORS = { container: '#4fb3ff', skin: '#9b6bff', sticker: '#f2994a', knifeglove: '#e05d7c', graffiti: '#2ec16b', other: '#8a93a6' };
+function pvDonut(parts, c, center) {
+	parts = parts.filter(p => p.value > 0);
+	const tot = parts.reduce((n, p) => n + p.value, 0);
+	if (!tot) return '<p class="muted small">—</p>';
+	// мелкие доли — в «прочее», чтобы легенда помещалась
+	if (parts.length > 6) { const rest = parts.slice(5).reduce((n, p) => n + p.value, 0); parts = parts.slice(0, 5).concat([{ label: t('kind_other'), value: rest, color: '#8a93a6' }]); }
+	const S = 132, r = 52, cx = S / 2;
+	let a = -Math.PI / 2;
+	const arcs = parts.map((p, i) => {
+		const frac = p.value / tot;
+		if (frac >= 0.9999) return `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${p.color || PV_COLORS[i % 7]}" stroke-width="18"/>`;
+		const b = a + frac * Math.PI * 2;
+		const d = `M${(cx + r * Math.cos(a)).toFixed(2)},${(cx + r * Math.sin(a)).toFixed(2)} A${r},${r} 0 ${b - a > Math.PI ? 1 : 0} 1 ${(cx + r * Math.cos(b)).toFixed(2)},${(cx + r * Math.sin(b)).toFixed(2)}`;
+		a = b;
+		return `<path d="${d}" fill="none" stroke="${p.color || PV_COLORS[i % 7]}" stroke-width="18"><title>${esc(p.label)}: ${esc(cur(p.value, c))}</title></path>`;
+	}).join('');
+	return `<div class="pv-donut"><svg viewBox="0 0 ${S} ${S}">${arcs}<text x="${cx}" y="${cx + 5}" text-anchor="middle" style="font-size:${Math.min(17, Math.floor(132 / Math.max(1, String(center).length)))}px">${esc(center)}</text></svg>
+		<div class="pv-legend-list">${parts.map((p, i) => `<div><i style="background:${p.color || PV_COLORS[i % 7]}"></i><span class="grow" title="${esc(p.label)}">${esc(p.label)}</span><b>${esc(cur(p.value, c))}</b><span class="muted small">${Math.round(p.value / tot * 100)}%</span></div>`).join('')}</div></div>`;
+}
+const compactMoney = (v, c) => { try { return new Intl.NumberFormat(LANG === 'zh' ? 'zh-CN' : LANG, { style: 'currency', currency: c, notation: 'compact', maximumFractionDigits: 1 }).format(v); } catch (e) { return money(v); } };
+
+function renderValue() {
+	const r = ui.value;
+	if (!r) return;
+	const c = r.currency;
+	const period = ui.pvPeriod || 'd30';
+	document.querySelectorAll('#pvPeriod button').forEach(b => b.classList.toggle('active', b.dataset.p === period));
+	const ch = r.change && r.change[period];
+	const d1 = r.change && r.change.d1;
+	const delta = (x, sub) => x ? `<span class="${signCls(x.value)}">${esc(cur(x.value, c, true))}</span>` : '<span class="muted">—</span>';
+	const periodName = t('pv_' + period);
+	$('pvKpi').innerHTML = [
+		ovTile(t('pv_title'), esc(cur(r.total, c)), esc(`${t('in_inventory')} ${cur(r.inventory, c)} · ${t('in_casket')} ${cur(r.storage, c)}`), null, 'pv-kpi-main'),
+		ovTile(t('pv_kpi_d1'), delta(d1), d1 ? esc(pctFmt(d1.pct)) : esc(t('pv_kpi_wait'))),
+		ovTile(t('pv_kpi_period', { p: periodName.toLowerCase() }), delta(ch), ch ? esc(`${pctFmt(ch.pct)} · ${t('pv_price_effect')} ${cur(ch.price, c, true)}`) : esc(r.since ? t('pv_since', { d: shortDate(r.since) }) : t('pv_kpi_wait'))),
+		ovTile(t('pv_kpi_pnl'), r.pnl ? `<span class="${signCls(r.pnl.total)}">${esc(cur(r.pnl.total, c, true))}</span>` : '<span class="muted">—</span>',
+			r.pnl ? esc(r.pnl.roi != null ? `ROI ${pctFmt(r.pnl.roi)}` : '') : `<a href="#" class="pv-link" data-goto="pnl">${esc(t('pv_kpi_pnl_setup'))}</a>`),
+	].join('');
+	const days = { d1: 2, d7: 8, d30: 31 }[period];
+	const cut = days ? new Date(Date.now() - days * 86400e3).toLocaleDateString('sv') : '';
+	const idx = (r.series || []).map((p, i) => [p, i]).filter(([p]) => p.d >= cut).map(([, i]) => i);
+	const pts = idx.map(i => r.series[i]);
+	const inv = r.invested ? idx.map(i => r.invested[i]) : null;
+	$('pvChart').innerHTML = pvChart(pts, c, inv);
+	const lastInv = inv && inv.length ? inv[inv.length - 1].value : null;
+	const invOnChart = Boolean($('pvChart').querySelector('path[stroke-dasharray]'));
+	$('pvLegend').innerHTML = `<i class="lg-line"></i>${esc(t('pv_title').toLowerCase())}${lastInv != null ? ` · <i class="lg-dash ${invOnChart ? '' : 'hidden'}"></i>${esc(t('pv_invested'))}: ${esc(cur(lastInv, c))}` : ''}`;
+	const src = t('price_src_' + r.source) + (r.afterFee ? ` · ${t('price_fee').toLowerCase()}` : '');
+	const foot = [`${src} · ${t('pv_updated', { t: new Date(r.ts).toLocaleString(LANG === 'zh' ? 'zh-CN' : LANG, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) })}`];
+	if (r.unpriced) foot.push(t('pv_unpriced', { n: fmt(r.unpriced) }));
+	if (r.unreadCaskets) foot.push(t('pv_unread', { n: r.unreadCaskets }));
+	if (r.cached) foot.push(t('pv_cached', { t: new Date(r.cachedAt).toLocaleString(LANG === 'zh' ? 'zh-CN' : LANG, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }));
+	$('pvFoot').textContent = foot.join(' · ');
+	$('pvSource').value = r.source;
+	$('pvUp').innerHTML = ch ? pvRows(ch.up, c, 'mover') : `<p class="muted small">${esc(t('pv_movers_wait'))}</p>`;
+	$('pvDown').innerHTML = ch ? pvRows(ch.down, c, 'mover') : `<p class="muted small">${esc(t('pv_movers_wait'))}</p>`;
+	const top = (r.top || []).slice(0, 7);
+	const topMax = Math.max(1e-9, ...top.map(x => x.value));
+	$('pvTop').innerHTML = pvRows(top.map(x => ({ ...x, share: x.value / topMax })), c, 'topbar');
+	$('pvKinds').innerHTML = pvDonut(Object.entries(r.kinds || {}).map(([k, v]) => ({ label: t('kind_' + k), value: v, color: KIND_COLORS[k] })).sort((a, b) => b.value - a.value), c, compactMoney(r.total, c));
+	if (r.caskets && r.caskets.length) {
+		$('pvBarsTitle').textContent = t('pv_by_casket');
+		const parts = [{ label: t('inventory'), value: r.inventory }, ...r.caskets.map(x => ({ label: x.name || '—', value: x.value || 0 }))].sort((a, b) => b.value - a.value);
+		$('pvBars').innerHTML = pvDonut(parts, c, String(r.caskets.length));
+	} else {
+		$('pvBarsTitle').textContent = t('pv_by_account');
+		$('pvBars').innerHTML = pvDonut((r.accounts || []).map(a => ({ label: accName(a), value: a.total })).sort((a, b) => b.value - a.value), c, String((r.accounts || []).length));
+	}
+}
+
+$('pvSource').addEventListener('change', e => savePriceSetting({ priceSource: e.target.value }));
+$('pvPeriod').addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (b) { ui.pvPeriod = b.dataset.p; renderValue(); } });
+$('pvKpi').addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (g) { e.preventDefault(); switchTab(g.dataset.goto); } });
+$('pvEnable').addEventListener('click', () => savePriceSetting({ priceEnabled: true }));
+
+// ============================================================ выпадающий поиск предмета (вместо системного datalist)
+// source(q) -> [{ name, image, sub }] (или Promise). Стрелки, Enter, Esc, клик мышью.
+function combo(input, { source, onPick }) {
+	const list = document.createElement('div');
+	list.className = 'combo-list hidden';
+	input.parentElement.appendChild(list);
+	let items = [], idx = -1, seq = 0, timer = null;
+	const hide = () => list.classList.add('hidden');
+	const render = () => {
+		list.innerHTML = items.length ? items.map((x, i) => `<div class="combo-item ${i === idx ? 'sel' : ''}" data-i="${i}">
+			<div class="combo-img">${x.image ? `<img src="${esc(x.image)}" alt="" loading="lazy">` : ''}</div>
+			<div class="combo-text"><div class="combo-name">${esc(x.name)}</div>${x.sub ? `<div class="combo-sub">${esc(x.sub)}</div>` : ''}</div></div>`).join('')
+			: `<div class="combo-empty">${esc(t(input.value.trim().length < 2 ? 'combo_type' : 'nothing_found'))}</div>`;
+		list.classList.remove('hidden');
+		const sel = list.querySelector('.sel'); if (sel) sel.scrollIntoView({ block: 'nearest' });
+	};
+	const update = async () => {
+		const my = ++seq;
+		const r = await Promise.resolve(source(input.value.trim())).catch(() => []);
+		if (my !== seq || document.activeElement !== input) return;
+		items = r || []; idx = items.length ? 0 : -1; render();
+	};
+	const pick = x => { input.value = x.name; hide(); if (onPick) onPick(x); };
+	input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(update, 140); });
+	input.addEventListener('focus', update);
+	input.addEventListener('blur', () => setTimeout(hide, 150));
+	input.addEventListener('keydown', e => {
+		if (list.classList.contains('hidden')) return;
+		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (items.length) { idx = (idx + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; render(); } }
+		else if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); pick(items[idx]); }
+		else if (e.key === 'Escape') { e.stopPropagation(); hide(); }
+	});
+	list.addEventListener('mousedown', e => { const el = e.target.closest('[data-i]'); if (el) { e.preventDefault(); pick(items[Number(el.dataset.i)]); } });
+	return { hide };
+}
+
+// ============================================================ портфель: прибыль и убыток по ценам покупки
+async function loadPnl() {
+	const off = ui.settings.priceEnabled === false;
+	$('pnlOff').classList.toggle('hidden', !off);
+	if (off) { $('pnlTiles').innerHTML = ''; $('pnlEmpty').classList.add('hidden'); return; }
+	const all = ui.pnlScope === 'all';
+	document.querySelectorAll('#pnlScope button').forEach(b => b.classList.toggle('active', b.dataset.scope === (all ? 'all' : 'one')));
+	$('pnlImport').classList.toggle('hidden', all);
+	if (!ui.pnl) {
+		$('pnlTiles').innerHTML = Array.from({ length: 6 }, () => '<div class="skeleton pv-kpi-skel"></div>').join('');
+		$('pnlTable').innerHTML = ''; $('pnlRecords').innerHTML = '';
+	}
+	try {
+		const q = all ? '?all=1' : '';
+		const [r, rec] = await Promise.all([all ? api('/api/pnl?all=1') : apiGet('/api/pnl'), all ? api('/api/pnl/records' + q) : apiGet('/api/pnl/records')]);
+		if (r.disabled) { $('pnlOff').classList.remove('hidden'); return; }
+		ui.pnl = r; ui.pnlRecs = rec;
+		renderPnl();
+		if (!all && !ui.importTimer) pollImport();
+	} catch (e) { $('pnlTiles').innerHTML = `<p class="muted small">${esc(e.message)}</p>`; }
+}
+
+function renderPnl() {
+	const r = ui.pnl;
+	if (!r) return;
+	const c = r.currency;
+	const hasData = r.records > 0;
+	$('pnlEmpty').classList.toggle('hidden', hasData);
+	$('pnlFill').classList.toggle('hidden', !r.uncoveredQty);
+	$('pnlPosCard').classList.toggle('hidden', !hasData);
+	const total = (r.unrealized || 0) + (r.realized || 0);
+	$('pnlTiles').innerHTML = !hasData ? '' : [
+		ovTile(t('pnl_invested'), esc(cur(r.invested, c)), esc(t('pnl_invested_sub'))),
+		ovTile(t('pnl_value'), esc(cur(r.value, c)), esc(t(r.afterFee ? 'pnl_value_sub_fee' : 'pnl_value_sub'))),
+		ovTile(t('pnl_unrealized'), `<span class="${signCls(r.unrealized)}">${esc(cur(r.unrealized, c, true))}</span>`, esc(r.roi != null ? `ROI ${pctFmt(r.roi)}` : '—')),
+		ovTile(t('pnl_realized'), `<span class="${signCls(r.realized)}">${esc(cur(r.realized, c, true))}</span>`, esc(t('pnl_realized_sub'))),
+		ovTile(t('pnl_total'), `<span class="${signCls(total)}">${esc(cur(total, c, true))}</span>`, esc(t('pnl_total_sub'))),
+		ovTile(t('pnl_uncovered'), fmt(r.uncoveredQty), esc(r.uncoveredValue ? t('pnl_uncovered_sub', { v: cur(r.uncoveredValue, c) }) : t('pnl_uncovered_sub0'))),
+	].join('');
+	const q = ($('pnlSearch').value || '').toLowerCase();
+	const rows = r.positions.filter(p => !q || p.name.toLowerCase().includes(q));
+	$('pnlTable').innerHTML = `<thead><tr><th>${esc(t('pnl_item_col'))}</th><th class="num">${esc(t('pnl_qty'))}</th><th class="num">${esc(t('pnl_avg'))}</th>
+		<th class="num">${esc(t('pnl_now'))}</th><th class="num">${esc(t('pnl_value'))}</th><th class="num">${esc(t('pnl_unrealized'))}</th><th class="num">${esc(t('pnl_realized'))}</th></tr></thead>
+		<tbody>${rows.map(p => `<tr>
+			<td><div class="it">${p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy">` : '<span class="pnl-noimg"></span>'}<div><div>${esc(p.name)}</div>
+				<div class="sub">${esc(t('pnl_bought_sold', { b: fmt(p.bought), s: fmt(p.sold) }))}</div></div></div></td>
+			<td class="num">${fmt(p.covered)}${p.held > p.covered ? `<div class="sub">${esc(t('pnl_of_held', { n: fmt(p.held) }))}</div>` : ''}</td>
+			<td class="num">${esc(cur(p.avg, c))}</td>
+			<td class="num">${esc(cur(p.unit, c))}</td>
+			<td class="num">${p.covered ? esc(cur(p.value, c)) : '—'}</td>
+			<td class="num"><b class="${signCls(p.pnl)}">${p.pnl != null ? esc(cur(p.pnl, c, true)) : '—'}</b>${p.roi != null ? `<div class="sub ${signCls(p.roi)}">${esc(pctFmt(p.roi))}</div>` : ''}</td>
+			<td class="num ${signCls(p.realized)}">${p.sold ? esc(cur(p.realized, c, true)) : '—'}</td>
+		</tr>`).join('') || `<tr><td colspan="7" class="muted">—</td></tr>`}</tbody>`;
+	const foot = [t('pnl_foot_fifo')];
+	if (r.soldNoCost) foot.push(t('pnl_sold_nocost', { n: fmt(r.soldNoCost) }));
+	const imp = Object.entries(r.imports || {}).filter(([, v]) => v);
+	if (imp.length) foot.push(imp.map(([l, v]) => t('pnl_imported_at', { a: l, d: new Date(v.at).toLocaleString(LANG === 'zh' ? 'zh-CN' : LANG, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) })).join(', '));
+	$('pnlFoot').textContent = foot.join(' · ');
+	// записи
+	const rec = ui.pnlRecs || { total: 0, rows: [] };
+	$('pnlRecCount').textContent = fmt(rec.total);
+	$('pnlClearImport').classList.toggle('hidden', ui.pnlScope === 'all' || !rec.rows.some(x => x.src === 'market'));
+	const src = x => t('pnl_src_' + x);
+	$('pnlRecords').innerHTML = rec.rows.length ? `<thead><tr><th>${esc(t('pnl_date'))}</th><th>${esc(t('pnl_type'))}</th><th>${esc(t('pnl_item_col'))}</th><th class="num">${esc(t('pnl_qty'))}</th>
+		<th class="num">${esc(t('pnl_price'))}</th><th>${esc(t('pnl_source'))}</th><th></th></tr></thead><tbody>${rec.rows.slice(0, 300).map(x => `<tr>
+			<td class="nowrap">${esc(new Date(x.ts).toLocaleDateString(LANG === 'zh' ? 'zh-CN' : LANG))}</td>
+			<td><span class="pnl-kind-tag ${x.kind}">${esc(t(x.kind === 'buy' ? 'pnl_buy' : 'pnl_sell'))}</span></td>
+			<td>${esc(x.name)}${ui.pnlScope === 'all' ? `<div class="sub">${esc(loginName(x.login))}</div>` : ''}</td>
+			<td class="num">${ui.pnlEdit === x.id && x.qty > 1 ? `<span class="pnl-edit" title="${esc(t('pnl_split_hint'))}"><input type="number" min="1" max="${x.qty}" id="pnlEditQty" value="${x.qty}" class="qty"><span class="muted small">/ ${fmt(x.qty)}</span></span>` : fmt(x.qty)}</td>
+			<td class="num">${ui.pnlEdit === x.id ? `<span class="pnl-edit"><input type="number" min="0" step="0.01" id="pnlEditPrice" value="${x.unit}"><select id="pnlEditCur" class="sel-input">${PRICE_CURRENCIES.map(c => `<option ${c === x.cur ? 'selected' : ''}>${c}</option>`).join('')}</select>
+				<button class="btn primary small" data-edit-save="${esc(x.id)}">✓</button><button class="btn ghost small" data-edit-cancel>✕</button></span>`
+				: `${esc(cur(x.unit, x.cur))}${x.edited ? ` <span class="muted small" title="${esc(t('pnl_edited'))}">✎</span>` : ''}`}</td>
+			<td class="muted small">${esc(src(x.src))}</td>
+			<td class="num nowrap"><button class="btn ghost small icon-only" data-edit-rec="${esc(x.id)}" title="${esc(t('pnl_edit_price'))}">✎</button>${x.src !== 'market' ? `<button class="btn ghost small icon-only" data-del-rec="${esc(x.id)}" title="${esc(t('delete'))}">✕</button>` : ''}</td>
+		</tr>`).join('')}</tbody>` : `<tbody><tr><td class="muted">${esc(t('pnl_no_records'))}</td></tr></tbody>`;
+}
+
+$('pnlScope').addEventListener('click', e => { const b = e.target.closest('[data-scope]'); if (b) { ui.pnlScope = b.dataset.scope; ui.pnl = null; loadPnl(); } });
+$('pnlRefresh').addEventListener('click', loadPnl);
+$('pnlSearch').addEventListener('input', renderPnl);
+$('pnlRecords').addEventListener('keydown', e => {
+	if (e.target.id !== 'pnlEditPrice' && e.target.id !== 'pnlEditQty') return;
+	if (e.key === 'Enter') { const b = document.querySelector('[data-edit-save]'); if (b) b.click(); }
+	if (e.key === 'Escape') { e.stopPropagation(); ui.pnlEdit = null; renderPnl(); }
+});
+$('pnlEnable').addEventListener('click', () => savePriceSetting({ priceEnabled: true }).then(loadPnl));
+// Импорт истории ТП идёт в фоне: показываем прогресс, можно уйти с вкладки и вернуться.
+function renderImportJob(j) {
+	const box = $('pnlImportBox');
+	const running = j && !j.finished;
+	box.classList.toggle('hidden', !running);
+	$('pnlImport').disabled = Boolean(running);
+	if (!running) return;
+	$('piTitle').textContent = t('pi_title');
+	const pct = j.total ? Math.min(100, j.done / j.total * 100) : 3;
+	$('piBar').style.width = `${pct}%`;
+	$('piText').textContent = j.waiting ? t('pi_waiting', { s: j.waiting })
+		: j.total ? t('pi_progress', { d: fmt(j.done), t: fmt(j.total), n: fmt(j.found || 0) }) : t('pi_start');
+}
+async function pollImport(first) {
+	clearTimeout(ui.importTimer);
+	if (ui.tab !== 'pnl' || ui.pnlScope === 'all') return;
+	try {
+		const j = first || await apiGet('/api/pnl/import');
+		renderImportJob(j);
+		if (!j) return;
+		ui.importTimer = null;
+		if (!j.finished) { ui.importTimer = setTimeout(() => pollImport(), 1200); return; }
+		if (ui.importShown === j.started) return;  // итог этого импорта уже показан
+		ui.importShown = j.started;
+		if (j.error) toast(j.error, 'bad');
+		else toast(t(j.stopped ? 'pi_stopped' : 'pnl_import_done', { n: fmt(j.added || 0), f: fmt(j.found || 0) }), 'good');
+		ui.pnl = null; loadPnl();
+	} catch (e) { /* следующий раз */ }
+}
+$('pnlImport').addEventListener('click', async () => {
+	try { pollImport(await apiPost('/api/pnl/import')); } catch (e) { toast(e.message, 'bad'); }
+});
+$('piStop').addEventListener('click', async () => { try { await apiPost('/api/pnl/import/stop'); $('piText').textContent = t('pi_stopping'); } catch (e) { toast(e.message, 'bad'); } });
+$('pnlClearImport').addEventListener('click', async () => {
+	const r = await miniConfirm({ icon: ICON_Q, warn: true, title: t('pnl_clear_import'), text: t('pnl_clear_import_q'), ok: t('delete') });
+	if (!r.ok) return;
+	try { await apiPost('/api/pnl/clearimport'); ui.pnl = null; loadPnl(); } catch (e) { toast(e.message, 'bad'); }
+});
+$('pnlRecords').addEventListener('click', async e => {
+	const ed = e.target.closest('[data-edit-rec]');
+	if (ed) {
+		// цена покупки влияет на всю прибыль — предупреждаем (можно отключить в «Подтверждениях»)
+		const r = await askConfirm('pnledit', { warn: true, icon: ICON_Q, title: t('pnl_edit_price'), text: t('pnl_edit_warn'), ok: t('pnl_edit_ok') });
+		if (!r.ok) return;
+		ui.pnlEdit = ed.dataset.editRec; renderPnl();
+		const inp = document.getElementById('pnlEditPrice'); if (inp) { inp.focus(); inp.select(); }
+		return;
+	}
+	if (e.target.closest('[data-edit-cancel]')) { ui.pnlEdit = null; renderPnl(); return; }
+	const sv = e.target.closest('[data-edit-save]');
+	if (sv) {
+		try {
+			const q = document.getElementById('pnlEditQty');
+			const r = await api('/api/pnl/update', { id: sv.dataset.editSave, price: $('pnlEditPrice').value, currency: $('pnlEditCur').value, qty: q ? q.value : null });
+			ui.pnlEdit = null; toast(t(r.split ? 'pnl_split_done' : 'pnl_saved_price', { n: fmt(r.record.qty) }), 'good'); loadPnl();
+		} catch (err) { toast(err.message, 'bad'); }
+		return;
+	}
+	const b = e.target.closest('[data-del-rec]');
+	if (!b) return;
+	try { await api('/api/pnl/delete', { ids: [b.dataset.delRec] }); loadPnl(); } catch (err) { toast(err.message, 'bad'); }
+});
+$('pnlExport').addEventListener('click', async () => {
+	try {
+		const r = await api('/api/pnl/export' + (ui.pnlScope === 'all' ? '?all=1' : ''), { account: ui.active, all: ui.pnlScope === 'all' });
+		toast(t('pnl_exported'), 'good', window.desktop ? { label: t('open_folder'), run: () => window.desktop.openPath(r.folder) } : null);
+	} catch (e) { toast(e.message, 'bad'); }
+});
+// ручное добавление
+function openPnlModal() {
+	const c = (ui.pnl && ui.pnl.currency) || 'USD';
+	$('pnlCur').innerHTML = PRICE_CURRENCIES.map(x => `<option value="${x}">${x}</option>`).join('');
+	$('pnlCur').value = PRICE_CURRENCIES.includes(c) ? c : 'USD';
+	pnlHint();
+	$('pnlName').value = ''; $('pnlQty').value = 1; $('pnlPrice').value = '';
+	$('pnlDate').value = new Date().toLocaleDateString('sv');
+	ui.pnlKind = 'buy';
+	document.querySelectorAll('#pnlKind button').forEach(b => b.classList.toggle('active', b.dataset.k === 'buy'));
+	$('pnlModal').classList.remove('hidden');
+	$('pnlName').focus();
+}
+$('pnlAdd').addEventListener('click', openPnlModal);
+// Подсказка «в наличии / без цены покупки» и кнопка «Макс.»: для покупки — сколько ещё без цены покупки,
+// для продажи — сколько есть с ценой покупки (больше продать по учёту нельзя).
+function pnlMax() {
+	const v = ((ui.pnl && ui.pnl.names) || {})[$('pnlName').value.trim()];
+	if (!v) return 0;
+	const [held, covered] = v;
+	return ui.pnlKind === 'sell' ? covered : (held - covered > 0 ? held - covered : held);
+}
+function pnlHint() {
+	const v = ((ui.pnl && ui.pnl.names) || {})[$('pnlName').value.trim()];
+	$('pnlHint').textContent = v ? t('pnl_hint', { h: fmt(v[0]), n: fmt(Math.max(0, v[0] - v[1])) }) : '';
+	$('pnlMax').disabled = !pnlMax();
+}
+$('pnlName').addEventListener('input', pnlHint);
+combo($('pnlName'), {
+	source: q => {
+		const names = Object.entries((ui.pnl && ui.pnl.names) || {});
+		const ql = q.toLowerCase();
+		return names.filter(([n]) => !ql || n.toLowerCase().includes(ql)).slice(0, 60)
+			.map(([name, [held, covered, image]]) => ({ name, image, sub: t('pnl_hint', { h: fmt(held), n: fmt(Math.max(0, held - covered)) }) }));
+	},
+	onPick: () => pnlHint(),
+});
+$('pnlMax').addEventListener('click', () => { const n = pnlMax(); if (n) $('pnlQty').value = n; });
+$('pnlFill').addEventListener('click', async () => {
+	const c = ui.pnl && ui.pnl.currency;
+	const r = await miniConfirm({ warn: true, icon: ICON_Q, title: t('pnl_fill'), ok: t('pnl_fill_ok'),
+		text: t('pnl_fill_q', { n: fmt((ui.pnl && ui.pnl.uncoveredQty) || 0), v: c ? cur(ui.pnl.uncoveredValue || 0, c) : '' }) });
+	if (!r.ok) return;
+	try {
+		const x = await api('/api/pnl/fill', { account: ui.active, all: ui.pnlScope === 'all' });
+		toast(t('pnl_fill_done', { n: fmt(x.items) }), 'good');
+		ui.pnl = null; loadPnl();
+	} catch (e) { toast(e.message, 'bad'); }
+});
+$('pnlKind').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (!b) return; ui.pnlKind = b.dataset.k; document.querySelectorAll('#pnlKind button').forEach(x => x.classList.toggle('active', x === b)); pnlHint(); });
+$('pnlCancel').addEventListener('click', () => $('pnlModal').classList.add('hidden'));
+$('pnlSave').addEventListener('click', async () => {
+	try {
+		await apiPost('/api/pnl/add', { kind: ui.pnlKind || 'buy', name: $('pnlName').value, qty: $('pnlQty').value, price: $('pnlPrice').value, currency: $('pnlCur').value, date: $('pnlDate').value });
+		$('pnlModal').classList.add('hidden');
+		toast(t('pnl_saved'), 'good');
+		loadPnl();
+	} catch (e) { toast(e.message, 'bad'); }
+});
+// CSV
+$('pnlCsv').addEventListener('click', () => $('pnlCsvFile').click());
+$('pnlCsvFile').addEventListener('change', async e => {
+	const f = e.target.files && e.target.files[0];
+	e.target.value = '';
+	if (!f) return;
+	try {
+		const text = await f.text();
+		const r = await apiPost('/api/pnl/csv', { text, currency: (ui.pnl && ui.pnl.currency) || 'USD' });
+		toast(t('pnl_csv_done', { n: fmt(r.added) }) + (r.errors.length ? ' · ' + t('pnl_csv_errors', { rows: r.errors.join(', ') }) : ''), r.added ? 'good' : 'bad');
+		loadPnl();
+	} catch (err) { toast(err.message, 'bad'); }
+});
 
 // ============================================================ контракт обмена (трейд-ап)
 // Названия грейдов — игровые термины CS2, одинаковы на всех языках.
@@ -1147,12 +1981,17 @@ const GRADES = { 1: 'Consumer', 2: 'Industrial', 3: 'Mil-Spec', 4: 'Restricted',
 const gradeName = (r, st) => (st ? 'StatTrak™ ' : '') + (GRADES[r] || ('#' + r));
 
 async function loadTradeup() {
-	$('tuGroups').innerHTML = Array.from({ length: 5 }, () => '<div class="skeleton" style="height:46px;margin:6px 0"></div>').join('');
+	$('tuGroups').innerHTML = Array.from({ length: 4 }, () => '<div class="skeleton" style="height:34px;width:130px;border-radius:999px"></div>').join('');
 	$('tuEmpty').classList.remove('hidden'); $('tuPanel').classList.add('hidden');
 	try {
 		ui.tu.groups = await apiGet('/api/tradeup/groups' + ($('tuCaskets').checked ? '?caskets=1' : ''));
+		const prev = ui.tu.rarity != null ? [ui.tu.rarity, ui.tu.stattrak] : null;
 		ui.tu.rarity = null; ui.tu.stattrak = null; ui.tu.picks = {}; ui.tu.preview = null;
 		renderTuGroups(); tuUpdateAction(); renderTuOdds();
+		// сразу открываем группу: прежнюю или первую, где хватает 10 предметов
+		const gs = ui.tu.groups || [];
+		const g = (prev && gs.find(x => x.rarity === prev[0] && x.stattrak === prev[1])) || gs.find(x => x.total >= 10) || gs[0];
+		if (g) selectTuGroup(g.rarity, g.stattrak);
 	} catch (e) { $('tuGroups').innerHTML = `<p class="muted" style="padding:16px">${esc(e.message)}</p>`; }
 }
 
@@ -1163,11 +2002,8 @@ function renderTuGroups() {
 	if (!gs.length) { $('tuGroups').innerHTML = `<p class="muted" style="padding:16px">${esc(t('tradeup_no_items'))}</p>`; return; }
 	$('tuGroups').innerHTML = gs.map(g => {
 		const sel = g.rarity === ui.tu.rarity && g.stattrak === ui.tu.stattrak;
-		return `<div class="tu-group ${sel ? 'sel' : ''} ${g.total >= 10 ? '' : 'short'}" data-rarity="${g.rarity}" data-st="${g.stattrak ? 1 : 0}">
-			<span class="tu-dot r${g.rarity}"></span>
-			<span class="grow">${esc(gradeName(g.rarity, g.stattrak))}</span>
-			<span class="muted small">${g.total}</span>
-		</div>`;
+		return `<button class="tu-chip ${sel ? 'sel' : ''} ${g.total >= 10 ? '' : 'short'}" data-rarity="${g.rarity}" data-st="${g.stattrak ? 1 : 0}" title="${esc(g.total >= 10 ? '' : t('tu_short'))}">
+			<span class="tu-dot r${g.rarity}"></span>${esc(gradeName(g.rarity, g.stattrak))}<span class="muted">${g.total}</span></button>`;
 	}).join('');
 }
 
@@ -1177,7 +2013,14 @@ function selectTuGroup(rarity, stattrak) {
 	const g = currentTuGroup();
 	$('tuEmpty').classList.toggle('hidden', Boolean(g));
 	$('tuPanel').classList.toggle('hidden', !g);
-	if (g) { $('tuGroupName').textContent = gradeName(g.rarity, g.stattrak) + ' · ' + g.total; renderTuItems(); }
+	if (g) {
+		// фильтр коллекций — только коллекции этой группы
+		const colls = [...new Set(g.items.map(i => i.collection).filter(Boolean))].sort();
+		const cur = $('tuColl').value;
+		$('tuColl').innerHTML = `<option value="">${esc(t('tu_all_colls'))}</option>` + colls.map(c => `<option value="${esc(c)}">${esc(shortColl(c))}</option>`).join('');
+		$('tuColl').value = colls.includes(cur) ? cur : '';
+		renderTuItems();
+	}
 }
 
 const EYE = '<svg viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>';
@@ -1208,32 +2051,73 @@ function tuSetPick(name, value, max) { const n = Math.max(0, Math.min(max, Math.
 
 // Выбор предметов для контракта: сверху 10 слотов (заполняются выбранными), ниже — карточки скинов.
 // Клик по карточке — +1, «−» на карточке или клик по слоту — убрать.
-function renderTuItems() {
-	const g = currentTuGroup(); if (!g) return;
+const shortColl = c => String(c || '').replace(/^The /, '').replace(/ Collection$/, '');
+// цвет коллекции — стабильный по названию
+const collColor = c => { let h = 0; for (const ch of String(c || '')) h = (h * 31 + ch.charCodeAt(0)) % 360; return `hsl(${h} 65% 62%)`; };
+
+function tuVisibleItems(g) {
 	const q = ($('tuSearch').value || '').toLowerCase();
-	const items = g.items.filter(i => !q || i.name.toLowerCase().includes(q));
-	$('tuItems').innerHTML = items.map(i => {
-		const n = ui.tu.picks[i.name] || 0;
-		const full = tuTotal() >= 10 && !n;
-		return `<div class="tu-card r${g.rarity} ${n ? 'picked' : ''} ${full || (i.blocked === 'top') ? 'dim' : ''} ${(i.blocked === 'top') ? 'blocked' : ''}" data-tu="${esc(i.name)}" title="${esc((i.blocked === 'top') ? t('tu_no_upgrade') : i.name)}">
-			${(i.blocked === 'top') ? `<span class="tu-block">${esc(t('tu_no_upgrade_short'))}</span>` : ''}
-			${n ? `<span class="tu-n">×${n}</span><button class="tu-minus" data-tuminus="${esc(i.name)}">−</button>` : ''}
-			<div class="tu-img">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy">` : ''}</div>
-			${i.inspect ? `<button class="tu-eye" data-insp-game="${esc(i.inspect)}" title="${esc(t('craft_inspect'))}">${EYE}</button>` : ''}
-			<div class="tu-name">${esc(i.name)}</div>
-			<div class="tu-sub">${t('in_inventory')}: ${fmt((i.blocked ? i.all || i.count : i.count) - (i.stored || 0))}${i.stored ? ` · ${t('in_casket')}: ${fmt(i.stored)}` : ''}</div>
-			${tuFloatRange(i)}
-		</div>`;
-	}).join('') || `<div class="empty-box">${esc(t('nothing_found'))}</div>`;
+	const coll = $('tuColl').value;
+	const minF = i => { const f = (i.floats || []).filter(x => x != null); return f.length ? Math.min(...f) : 9; };
+	const sorts = {
+		count: (a, b) => b.count - a.count,
+		float: (a, b) => minF(a) - minF(b),
+		price: (a, b) => (a.price ?? 1e9) - (b.price ?? 1e9),
+		name: (a, b) => a.name.localeCompare(b.name),
+	};
+	const sort = sorts[$('tuSort').value] || sorts.count;
+	return g.items
+		.filter(i => (!q || i.name.toLowerCase().includes(q) || (i.collection || '').toLowerCase().includes(q)) && (!coll || i.collection === coll))
+		.sort((a, b) => Boolean(a.blocked) - Boolean(b.blocked) || Boolean(ui.tu.picks[b.name]) - Boolean(ui.tu.picks[a.name]) || sort(a, b) || a.name.localeCompare(b.name));
+}
+
+function tuCard(i, g) {
+	const n = ui.tu.picks[i.name] || 0;
+	const full = tuTotal() >= 10 && !n;
+	const blocked = i.blocked === 'top';
+	const f = (i.floats || []).filter(x => x != null);
+	const lo = f.length ? Math.min(...f) : null, hi = f.length ? Math.max(...f) : null;
+	const have = (blocked ? i.all || i.count : i.count);
+	return `<div class="tu-card r${g.rarity} ${n ? 'picked' : ''} ${full || blocked ? 'dim' : ''} ${blocked ? 'blocked' : ''}" data-tu="${esc(i.name)}" title="${esc(blocked ? t('tu_no_upgrade') : i.name)}">
+		${blocked ? `<span class="tu-block">${esc(t('tu_no_upgrade_short'))}</span>` : ''}
+		${n ? `<span class="tu-n">×${n}</span><button class="tu-minus" data-tuminus="${esc(i.name)}">−</button>` : `<span class="tu-have" title="${esc(i.stored ? `${t('in_casket')}: ${i.stored}` : '')}">${fmt(have)} ${esc(t('pcs'))}${i.stored ? ' 📦' : ''}</span>`}
+		<div class="tu-img">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy">` : ''}</div>
+		${i.inspect ? `<button class="tu-eye" data-insp-game="${esc(i.inspect)}" title="${esc(t('craft_inspect'))}">${EYE}</button>` : ''}
+		<div class="tu-name">${esc(i.name)}</div>
+		${i.collection ? `<div class="tu-coll" style="--cc:${collColor(i.collection)}" title="${esc(i.collection)}">${esc(shortColl(i.collection))}</div>` : ''}
+		<div class="tu-meta"><span>${lo != null ? `${lo.toFixed(3)}${hi !== lo ? `–${hi.toFixed(3)}` : ''}` : ''}</span><span>${i.price != null ? esc(cur(i.price, i.currency)) : ''}</span></div>
+		${f.length ? floatBar(f.length > 3 ? [lo, hi] : f, { cls: 'sm' }) : ''}
+	</div>`;
+}
+
+// Быстрое обновление после клика: перерисовываем только эту карточку (и затемнение остальных), а не всю сетку.
+function tuUpdatePicked(name) {
+	const g = currentTuGroup(); if (!g) return;
+	const it = g.items.find(x => x.name === name);
+	const el = document.querySelector(`#tuItems [data-tu="${CSS.escape(name)}"]`);
+	if (el && it) el.outerHTML = tuCard(it, g);
+	const full = tuTotal() >= 10;
+	document.querySelectorAll('#tuItems .tu-card:not(.blocked)').forEach(c => c.classList.toggle('dim', full && !ui.tu.picks[c.dataset.tu]));
 	renderTuTray();
 	tuUpdateAction();
 }
 
-function tuFloatRange(i) {
-	const f = (i.floats || []).filter(x => x != null);
-	if (!f.length) return '';
-	const lo = Math.min(...f), hi = Math.max(...f);
-	return `<div class="tu-float">float ${fl4(lo)}${hi !== lo ? ` – ${fl4(hi)}` : ''}</div>${floatBar(f.length > 3 ? [lo, hi] : f, { cls: 'sm' })}`;
+function renderTuItems() {
+	const g = currentTuGroup(); if (!g) return;
+	const items = tuVisibleItems(g);
+	const next = GRADES[g.rarity + 1] || '';
+	if (!items.length) $('tuItems').innerHTML = `<div class="empty-box">${esc(t('nothing_found'))}</div>`;
+	else if ($('tuGroupColl').checked) {
+		// группы по коллекциям (как в игре): заголовок — сколько скинов и сколько вариантов результата
+		const by = new Map();
+		for (const i of items) { const k = i.collection || '—'; if (!by.has(k)) by.set(k, []); by.get(k).push(i); }
+		$('tuItems').innerHTML = [...by].map(([c, list]) => `<div class="tu-coll-group">
+			<div class="tu-coll-head"><span class="tu-coll" style="--cc:${collColor(c)}">${esc(c)}</span>
+				<span class="muted small">${esc(t('tu_coll_info', { s: list.length, n: fmt(list.reduce((x, i) => x + i.count, 0)) }))}${list[0].nextCount ? ` · ${esc(t('tu_coll_next', { n: list[0].nextCount, g: next }))}` : ''}</span></div>
+			<div class="tu-grid-in">${list.map(i => tuCard(i, g)).join('')}</div></div>`).join('');
+	} else $('tuItems').innerHTML = `<div class="tu-grid-in">${items.map(i => tuCard(i, g)).join('')}</div>`;
+	renderTuTray();
+	tuUpdateAction();
 }
 
 function renderTuTray() {
@@ -1285,7 +2169,17 @@ function renderTuOdds() {
 	if (p.avgFloat != null) sub.push(`${t('tu_avg_float')}: ${fl4(p.avgFloat)}`);
 	$('tuOddsSub').textContent = sub.join(' · ');
 	const nextColor = RARITY_COLORS[g.rarity + 1] || '#8847ff';
-	$('tuOddsList').innerHTML = (p.topTier && p.topTier.length ? `<div class="tu-odds-warn">${esc(t('tu_top_tier', { names: [...new Set(p.topTier)].join(', ') }))}</div>` : '')
+	const pc = p.prices && p.prices.currency;
+	const pr = p.prices;
+	// Окупаемость: стоимость входов, ожидаемая стоимость результата и шанс получить больше, чем вложено
+	const ev = pr && (pr.cost != null || pr.ev != null) ? `<div class="tu-ev">
+		<div><span class="muted small">${esc(t('tu_cost'))}</span><b>${esc(cur(pr.cost, pc))}</b></div>
+		<div><span class="muted small">${esc(t('tu_ev'))}</span><b>${esc(cur(pr.ev, pc))}</b></div>
+		${pr.profit != null ? `<div><span class="muted small">${esc(t('tu_profit'))}</span><b class="${signCls(pr.profit)}">${esc(cur(pr.profit, pc, true))}${pr.cost ? ` <small>${esc(pctFmt(pr.profit / pr.cost))}</small>` : ''}</b></div>
+		<div><span class="muted small">${esc(t('tu_win'))}</span><b>${(pr.winChance * 100).toFixed(0)}%</b></div>`
+		: `<div class="muted small tu-ev-note">${esc(t(pr.coverage < 0.999 ? 'tu_ev_partial' : 'tu_ev_inputs'))}</div>`}
+	</div>` : '';
+	$('tuOddsList').innerHTML = ev + (p.topTier && p.topTier.length ? `<div class="tu-odds-warn">${esc(t('tu_top_tier', { names: [...new Set(p.topTier)].join(', ') }))}</div>` : '')
 		+ (p.unknown && p.unknown.length ? `<div class="tu-odds-warn">${esc(t('tu_unknown', { names: [...new Set(p.unknown)].join(', ') }))}</div>` : '')
 		+ p.outcomes.map(o => `<div class="tu-out" style="--rc:${nextColor}">
 			<div class="tu-out-img">${o.image ? `<img src="${esc(o.image)}" alt="" loading="lazy">` : ''}</div>
@@ -1295,7 +2189,7 @@ function renderTuOdds() {
 				${o.float != null ? floatBar(o.float, { min: o.min, max: o.max, cls: 'sm' }) : ''}
 				<div class="tu-out-bar"><i style="width:${Math.max(2, o.chance * 100).toFixed(1)}%"></i></div>
 			</div>
-			<div class="tu-out-side"><b>${(o.chance * 100).toFixed(o.chance < 0.1 ? 1 : 0)}%</b>
+			<div class="tu-out-side"><b>${(o.chance * 100).toFixed(o.chance < 0.1 ? 1 : 0)}%</b>${pc && o.price != null ? `<span class="tu-out-price ${pr.cost != null ? signCls(o.price - pr.cost) : ''}">${esc(cur(o.price, pc))}</span>` : ''}
 				<button class="tu-mkt" data-open="${esc(marketUrl(o.marketName))}" title="${esc(t('craft_market'))}">${esc(t('tu_market_short'))}</button></div>
 		</div>`).join('');
 }
@@ -1318,15 +2212,24 @@ function showCraftResult(r) {
 	$('craftGrade').textContent = r.rarity ? ((r.stattrak ? 'StatTrak™ ' : '') + (RARITY_NAMES[r.rarity] || '')) : '';
 	$('craftGrade').classList.toggle('hidden', !r.rarity);
 	$('craftFloat').innerHTML = r.float != null ? `<div>float ${Number(r.float).toFixed(6)}</div>${floatBar(r.float)}` : '';
+	// итог контракта: сколько стоили 10 входов и сколько стоит полученный предмет (по текущему прайсу)
+	const P = r.prices, pc = P && P.currency;
+	$('craftPnl').classList.toggle('hidden', !P || (P.cost == null && P.value == null));
+	if (P) $('craftPnl').innerHTML = `<div><span>${esc(t('tu_cost'))}</span><b>${esc(cur(P.cost, pc))}</b></div>
+		<div><span>${esc(t('craft_value'))}</span><b>${P.value != null ? esc(cur(P.value, pc)) : esc(t('craft_no_price'))}</b></div>
+		<div class="craft-pnl-r ${signCls(P.profit)}"><span>${esc(t(P.profit == null ? 'tu_profit' : P.profit >= 0 ? 'craft_profit' : 'craft_loss'))}</span><b>${P.profit != null ? esc(cur(P.profit, pc, true)) + (P.cost ? ` <small>${esc(pctFmt(P.profit / P.cost))}</small>` : '') : '—'}</b></div>`;
+	const view = { name: r.name, image: r.image, rarity: r.rarity, float: r.float, seed: r.seed, kills: r.stattrak ? 0 : null, souvenir: false, nameTag: null, stickers: [], inspect: null };
+	$('craftView').classList.toggle('hidden', !r.name);
+	$('craftView').onclick = () => openItemView(view);
 	// «На Торговой площадке» — сразу (по названию); «Осмотреть» — когда предмет появится в веб-инвентаре
 	$('craftMarket').classList.toggle('hidden', !r.name);
 	$('craftMarket').onclick = () => openExt(marketUrl(r.name));
 	const insp = $('craftInspect');
 	insp.classList.toggle('hidden', !r.id);
-	insp.disabled = true; insp.title = t('craft_inspect_wait'); insp.onclick = null;
+	insp.disabled = true; insp.dataset.tip = t('craft_inspect_wait'); insp.onclick = null;
 	if (r.id) apiGet('/api/inspect?wait=1&id=' + encodeURIComponent(r.id)).then(x => {
 		if (!x.link) { insp.classList.add('hidden'); return; }
-		insp.disabled = false; insp.title = ''; insp.onclick = () => openExt(x.link);
+		insp.disabled = false; insp.dataset.tip = t('craft_tip_inspect'); insp.onclick = () => launchInspect(x.link); view.inspect = x.link;
 	}).catch(() => insp.classList.add('hidden'));
 	$('craftModal').classList.remove('hidden');
 	$('craftOk').focus();
@@ -1336,7 +2239,7 @@ async function runTradeUp() {
 	const g = currentTuGroup(); if (!g) return;
 	const ids = tuPickedIds();
 	if (ids.length !== 10) return toast(t('tradeup_need10', { n: ids.length }), 'bad');
-	if (!(await miniConfirm({ warn: true, title: t('tradeup_do'), text: t('tradeup_confirm') })).ok) return;
+	if (!(await askConfirm('tradeup', { warn: true, title: t('tradeup_do'), text: t('tradeup_confirm') })).ok) return;
 	$('tuDo').disabled = true;
 	try {
 		const r = await apiPost('/api/tradeup/craft', { itemIds: ids });
@@ -1348,22 +2251,37 @@ async function runTradeUp() {
 
 $('tuGroups').addEventListener('click', e => { const el = e.target.closest('[data-rarity]'); if (el) selectTuGroup(Number(el.dataset.rarity), el.dataset.st === '1'); });
 // «Осмотреть» на карточке/слоте и «ТП» у исхода — не выбирают предмет
-const tuLink = e => { const b = e.target.closest('[data-insp-game],[data-open]'); if (!b) return false; openExt(b.dataset.inspGame || b.dataset.open); return true; };
+const tuLink = e => { const b = e.target.closest('[data-insp-game],[data-open]'); if (!b) return false; if (b.dataset.inspGame) launchInspect(b.dataset.inspGame); else openExt(b.dataset.open); return true; };
 $('tuOddsList').addEventListener('click', tuLink);
 $('tuItems').addEventListener('click', e => {
 	if (tuLink(e)) return;
 	const minus = e.target.closest('[data-tuminus]');
 	const card = e.target.closest('[data-tu]');
 	const g = currentTuGroup(); if (!g) return;
-	if (minus) { const name = minus.dataset.tuminus; tuSetPick(name, (ui.tu.picks[name] || 0) - 1, 999); renderTuItems(); return; }
+	if (minus) { const name = minus.dataset.tuminus; tuSetPick(name, (ui.tu.picks[name] || 0) - 1, 999); tuUpdatePicked(name); return; }
 	if (card) {
 		const it = g.items.find(x => x.name === card.dataset.tu);
 		if (it && it.blocked) { toast(t('tu_no_upgrade'), 'bad'); return; }
-		if (it && tuTotal() < 10) { tuSetPick(it.name, (ui.tu.picks[it.name] || 0) + 1, it.count); renderTuItems(); }
+		if (it && tuTotal() < 10) {
+			const add = e.shiftKey ? 10 - tuTotal() : 1;  // Shift+клик — сколько поместится
+			tuSetPick(it.name, (ui.tu.picks[it.name] || 0) + add, it.count); tuUpdatePicked(it.name);
+		}
 	}
 });
-$('tuTray').addEventListener('click', e => { if (tuLink(e)) return; const s2 = e.target.closest('[data-tuminus]'); if (s2) { tuSetPick(s2.dataset.tuminus, (ui.tu.picks[s2.dataset.tuminus] || 0) - 1, 999); renderTuItems(); } });
-$('tuSearch').addEventListener('input', renderTuItems);
+$('tuItems').addEventListener('contextmenu', e => {
+	const card = e.target.closest('[data-tu]');
+	if (!card) return;
+	e.preventDefault();
+	const name = card.dataset.tu;
+	if (ui.tu.picks[name]) { tuSetPick(name, ui.tu.picks[name] - 1, 999); tuUpdatePicked(name); }
+});
+$('tuColl').addEventListener('change', renderTuItems);
+$('tuSort').addEventListener('change', renderTuItems);
+$('tuGroupColl').addEventListener('change', () => { try { localStorage.setItem('tuGroupColl', $('tuGroupColl').checked ? '1' : ''); } catch (e) { /* нет хранилища */ } renderTuItems(); });
+try { $('tuGroupColl').checked = localStorage.getItem('tuGroupColl') === '1'; } catch (e) { /* нет хранилища */ }
+$('tuTray').addEventListener('click', e => { if (tuLink(e)) return; const s2 = e.target.closest('[data-tuminus]'); if (s2) { tuSetPick(s2.dataset.tuminus, (ui.tu.picks[s2.dataset.tuminus] || 0) - 1, 999); tuUpdatePicked(s2.dataset.tuminus); } });
+let tuSearchTimer = null;
+$('tuSearch').addEventListener('input', () => { clearTimeout(tuSearchTimer); tuSearchTimer = setTimeout(renderTuItems, 150); });
 $('tuClear').addEventListener('click', () => { ui.tu.picks = {}; renderTuItems(); });
 $('tuDo').addEventListener('click', runTradeUp);
 $('tuCaskets').addEventListener('change', loadTradeup);
@@ -1388,9 +2306,9 @@ function renderTrades() {
 	document.querySelectorAll('#tradeDir button').forEach(b => b.classList.toggle('active', b.dataset.dir === ui.tradeDir));
 	$('tradeItems').innerHTML = list.length ? list.map(o => `
 		<div class="trade-row ${o.id === ui.tradeSel ? 'sel' : ''}" data-offer="${esc(o.id)}">
-			${o.partnerAvatar ? `<img class="avatar" src="${esc(o.partnerAvatar)}" alt="">` : `<div class="avatar">${esc((o.partnerName || '?')[0].toUpperCase())}</div>`}
+			${o.partnerAvatar ? `<img class="avatar pii" src="${esc(o.partnerAvatar)}" alt="">` : `<div class="avatar pii">${esc((o.partnerName || '?')[0].toUpperCase())}</div>`}
 			<div style="min-width:0;flex:1">
-				<div class="strong" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(o.partnerName || o.partner)}</div>
+				<div class="strong pii" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(o.partnerName || o.partner)}</div>
 				<div class="meta"><span class="tstate ${esc(o.state)}">${esc(t('ts_' + o.state))}</span><span class="muted">${esc(tsDate(o.updated))}</span>${isGift(o) ? `<span class="gift-tag">${esc(t('gift'))}</span>` : ''}</div>
 			</div>
 			<div class="muted small">−${o.give.length} / +${o.receive.length}</div>
@@ -1412,8 +2330,8 @@ function renderTradeDetail() {
 		: `<button class="btn danger-ghost" data-tact="cancel">${esc(t('cancel_offer'))}</button>`) : '';
 	$('tradeDetail').innerHTML = `
 		<div class="td-head">
-			${o.partnerAvatar ? `<img class="avatar" src="${esc(o.partnerAvatar)}" alt="">` : `<div class="avatar">${esc((o.partnerName || '?')[0].toUpperCase())}</div>`}
-			<div><div class="strong">${esc(o.partnerName || o.partner)}</div><div class="muted small">#${esc(o.id)} · ${esc(tsDate(o.created))} · <span class="tstate ${esc(o.state)}">${esc(t('ts_' + o.state))}</span></div></div>
+			${o.partnerAvatar ? `<img class="avatar pii" src="${esc(o.partnerAvatar)}" alt="">` : `<div class="avatar pii">${esc((o.partnerName || '?')[0].toUpperCase())}</div>`}
+			<div><div class="strong pii">${esc(o.partnerName || o.partner)}</div><div class="muted small">#${esc(o.id)} · ${esc(tsDate(o.created))} · <span class="tstate ${esc(o.state)}">${esc(t('ts_' + o.state))}</span></div></div>
 		</div>
 		${o.message ? `<div class="td-msg">${esc(o.message)}</div>` : ''}
 		${o.escrowEnd ? `<div class="warn-text">${esc(t('trade_escrow', { date: tsDate(o.escrowEnd) }))}</div>` : ''}
@@ -1472,39 +2390,22 @@ function renderMarket() {
 			<td class="num"><button class="btn ghost small" data-mremove="${esc(l.id)}">${esc(t('m_remove'))}</button></td></tr>`).join('')}</tbody></table>` : `<div class="empty-box">${esc(t('m_empty'))}</div>`;
 	} else if (ui.mtab === 'orders') {
 		const rows = m.buyOrders.filter(o => match(o.name));
-		html = rows.length ? `<table class="mt"><thead><tr><th>${esc(t('col_name'))}</th><th class="num">${esc(t('col_price'))}</th><th class="num">${esc(t('col_qty'))}</th><th class="num">${esc(t('total'))}</th><th></th></tr></thead><tbody>
+		html = `<div class="sell-bar"><button class="btn primary" id="boNew">+ ${esc(t('bo_title'))}</button><span class="muted small">${esc(t('bo_hint'))}</span></div>` + (rows.length ? `<table class="mt"><thead><tr><th>${esc(t('col_name'))}</th><th class="num">${esc(t('col_price'))}</th><th class="num">${esc(t('col_qty'))}</th><th class="num">${esc(t('total'))}</th><th></th></tr></thead><tbody>
 			${rows.map(o => `<tr><td>${it(o.image, o.name)}</td><td class="num">${money(o.price)} ${esc(o.currency)}</td><td class="num">${o.remaining}/${o.quantity}</td><td class="num">${money(o.price * o.remaining)} ${esc(o.currency)}</td>
-			<td class="num"><button class="btn ghost small" data-mcancel="${esc(o.id)}">${esc(t('m_cancel_order'))}</button></td></tr>`).join('')}</tbody></table>` : `<div class="empty-box">${esc(t('m_empty'))}</div>`;
+			<td class="num"><button class="btn ghost small" data-mcancel="${esc(o.id)}">${esc(t('m_cancel_order'))}</button></td></tr>`).join('')}</tbody></table>` : `<div class="empty-box">${esc(t('m_empty'))}</div>`);
 	} else if (ui.mtab === 'confirm') {
 		if (!m.confirmations) html = `<div class="empty-box">${esc(t('m_need_mafile'))}</div>`;
 		else {
 			const rows = m.confirmations.filter(c => match(c.title + ' ' + c.summary.join(' ')));
 			if (rows.length) bulk = t('m_confirm_all', { n: rows.length });
 			html = rows.length ? `<table class="mt"><thead><tr><th>${esc(t('col_name'))}</th><th>${esc(t('m_type'))}</th><th class="num">${esc(t('m_created'))}</th><th></th></tr></thead><tbody>
-				${rows.map(c => `<tr><td>${it(c.icon, c.title, c.summary.join(' · '))}</td><td>${esc(c.typeName || c.type)}</td><td class="num">${esc(tsDate(c.time))}</td>
+				${rows.map(c => `<tr><td class="pii-cell">${it(c.icon, c.title, c.summary.join(' · '))}</td><td>${esc(c.typeName || c.type)}</td><td class="num">${esc(tsDate(c.time))}</td>
 				<td class="num"><button class="btn ghost small" data-cdeny="${esc(c.id)}">${esc(t('decline'))}</button> <button class="btn good small" data-callow="${esc(c.id)}">${esc(t('confirm'))}</button></td></tr>`).join('')}</tbody></table>`
 				: `<div class="empty-box">${esc(t('m_no_confirm'))}</div>`;
 		}
 	} else if (ui.mtab === 'sell') {
 		if (!ui.sell) { html = '<div class="skeleton" style="height:260px"></div>'; loadSellable(); }
-		else {
-			const rows = ui.sell.items.filter(g => match(g.name));
-			const cur = ui.sell.currency;
-			const n = Object.values(ui.sell.picks).reduce((a, p) => a + (p.qty > 0 && p.price > 0 ? p.qty : 0), 0);
-			if (n) bulk = t('m_sell_go', { n });
-			html = rows.length ? `<table class="mt"><thead><tr><th>${esc(t('col_name'))}</th><th class="num">${esc(t('m_have'))}</th><th class="num">${esc(t('m_market_price'))}</th><th class="num">${esc(t('col_qty'))}</th><th class="num">${esc(t('m_buyer_pays'))}</th><th class="num">${esc(t('m_you_get'))}</th></tr></thead><tbody>
-				${rows.map(g => {
-					const p = ui.sell.picks[g.hashName] || {};
-					const pr = ui.sell.prices[g.hashName];
-					const priceCell = pr === 'loading' ? '…' : pr ? `${pr.lowest != null ? money(pr.lowest) : '—'} / ${pr.median != null ? money(pr.median) : '—'} <span class="sub">· ${fmt(pr.volume)}</span>`
-						: `<button class="btn ghost small" data-mprice="${esc(g.hashName)}">${esc(t('m_get_price'))}</button>`;
-					const get = p.price > 0 ? money(sellReceive(p.price)) + ' ' + esc(cur) : '—';
-					return `<tr><td>${it(g.image, g.name)}</td><td class="num">${fmt(g.count)}</td><td class="num">${priceCell}</td>
-						<td class="num"><input class="mini-in" type="number" min="0" max="${g.count}" value="${p.qty || ''}" placeholder="0" data-sq="${esc(g.hashName)}"></td>
-						<td class="num"><input class="mini-in wide" type="number" min="0" step="0.01" value="${p.price || ''}" placeholder="0.00" data-sp="${esc(g.hashName)}"></td>
-						<td class="num" data-sget="${esc(g.hashName)}">${get}</td></tr>`;
-				}).join('')}</tbody></table>` : `<div class="empty-box">${esc(t('m_nothing_sell'))}</div>`;
-		}
+		else html = renderSellTab(match, it, n => { bulk = t('m_sell_go', { n }); });
 	} else if (ui.mtab === 'history') {
 		const h = ui.history;
 		if (!h) { html = '<div class="skeleton" style="height:260px"></div>'; loadHistory(0); }
@@ -1516,57 +2417,141 @@ function renderMarket() {
 		}
 	}
 	$('marketTable').innerHTML = html;
+	sellMark();
 	$('mBulk').classList.toggle('hidden', !bulk);
+	$('mBulk').classList.toggle('primary', ui.mtab === 'sell');
+	$('mBulk').classList.toggle('ghost', ui.mtab !== 'sell');
 	if (bulk) $('mBulk').textContent = bulk;
 }
 
+// Валюты, в которых ТП Steam принимает только целые суммы (как community.WHOLE_UNITS; рубли — с копейками):
+// там нельзя ставить копейки — перебивка, ордера и лоты шагом в 1 единицу. Сервер округляет так же.
+const WHOLE_CUR = new Set(['JPY', 'IDR', 'VND', 'KRW', 'UAH', 'INR', 'CLP', 'COP', 'TWD', 'KZT', 'CRC', 'UYU']);
+const isWhole = c => WHOLE_CUR.has(c);
+const tick = c => (isWhole(c) ? 1 : 0.01);
+const minPrice = c => (isWhole(c) ? 1 : 0.03);
+// Цена по шагу валюты: dir 'down' / 'up' или до ближайшей
+function roundPrice(v, c, dir) {
+	if (v == null || !(v > 0)) return v;
+	const k = v / tick(c), r = dir === 'down' ? Math.floor(k + 1e-9) : dir === 'up' ? Math.ceil(k - 1e-9) : Math.round(k);
+	return Math.max(minPrice(c), Math.round(r * tick(c) * 100) / 100);
+}
+const pmoney = (v, c) => (isWhole(c) && Number.isInteger(Math.round(v * 100) / 100) ? fmt(v) : money(v));
+const priceIn = c => `step="${tick(c)}" min="${minPrice(c)}" placeholder="${isWhole(c) ? '0' : '0.00'}"`;
+
 // Комиссия Steam (5% + 10% игре, каждая ≥ 1 цента) — как на сервере (community.receiveFromBuyer).
-function sellReceive(buyer) {
-	const c = Math.round(buyer * 100);
+function sellReceive(buyer, cy = ui.sell && ui.sell.currency) {
+	const whole = isWhole(cy);
+	const c = whole ? Math.max(100, Math.round(buyer) * 100) : Math.round(buyer * 100);
 	const fee = r => Math.max(1, Math.floor(r * 0.05)) + Math.max(1, Math.floor(r * 0.10));
 	let r = Math.max(1, Math.floor(c / 1.15));
 	while (r > 1 && r + fee(r) > c) r--;
 	while (r + 1 + fee(r + 1) <= c) r++;
+	if (whole) while (r > 1 && (r + fee(r)) % 100) r--;  // покупатель должен платить целую сумму
 	return r / 100;
+}
+
+// ---------------- продажа: выбор игры, подсказка цены (стакан, медиана, график), прибыль, продажа из ящиков
+const SELL_GAMES = [[730, 'Counter-Strike 2'], [753, 'Steam'], [570, 'Dota 2'], [440, 'Team Fortress 2'], [252490, 'Rust']];
+function renderSellTab(match, it, setBulk) {
+	const S = ui.sell, c = S.currency;
+	const rows = S.items.filter(g => match(g.name));
+	const n = Object.values(S.picks).reduce((a, p) => a + (p.qty > 0 && p.price > 0 ? p.qty : 0), 0);
+	if (n) setBulk(n);
+	const bar = `<div class="sell-bar"><select id="mGame" class="sel-input">${SELL_GAMES.map(([id, name]) => `<option value="${id}" ${id === S.appid ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select>
+		${S.appid === 730 ? `<span class="muted small">${esc(t('m_from_caskets_hint'))}</span>` : ''}${isWhole(c) ? `<span class="sell-whole small" title="${esc(t('cur_whole', { c }))}">${esc(t('cur_whole_short', { c }))}</span>` : ''}<span class="spacer"></span>
+		<label class="check small"><input type="checkbox" id="mAutoConfirm" ${ui.settings.marketAutoConfirm !== false ? 'checked' : ''}> <span>${esc(t('m_auto_confirm'))}</span></label></div>`;
+	if (!rows.length) return bar + `<div class="empty-box">${esc(t('m_nothing_sell'))}</div>`;
+	return bar + `<table class="mt sell-table"><thead><tr><th>${esc(t('col_name'))}</th><th class="num">${esc(t('m_have'))}</th><th class="num">${esc(t('m_lot_order'))}</th><th class="num">${esc(t('col_qty'))}</th><th class="num">${esc(t('m_buyer_pays'))}</th><th class="num">${esc(t('m_you_get'))}</th></tr></thead><tbody>
+		${rows.map(g => {
+			const p = S.picks[g.hashName] || {};
+			const q = S.quotes[g.hashName];
+			const have = g.count + (g.stored || 0);
+			const priceCell = q === 'loading' ? `<button class="btn ghost small sell-loading" disabled><span class="spinner tiny"></span> ${esc(t('loading'))}</button>` : q ? `<button class="sell-q" data-mquote="${esc(g.hashName)}">${q.lowestSell != null ? pmoney(q.lowestSell, c) : '—'} / ${q.highestBuy != null ? pmoney(q.highestBuy, c) : '—'}</button>`
+				: `<button class="btn ghost small" data-mquote="${esc(g.hashName)}">${esc(t('m_get_price'))}</button>`;
+			const get = p.price > 0 ? money(sellReceive(p.price)) + ' ' + esc(c) : '—';
+			const open = S.open === g.hashName && q && q !== 'loading';
+			const mkt = `https://steamcommunity.com/market/listings/${S.appid}/${encodeURIComponent(g.hashName)}`;
+			return `<tr class="${open || q === 'loading' ? 'open' : ''}"><td><div class="sell-name">${it(g.image, g.name)}<button class="sell-mkt" data-open="${esc(mkt)}" title="${esc(t('m_open_market'))}"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></td>
+				<td class="num">${fmt(g.count)}${g.stored ? `<div class="sub" title="${esc(t('m_from_caskets_hint'))}">📦 +${fmt(g.stored)}</div>` : ''}</td><td class="num">${priceCell}</td>
+				<td class="num"><span class="sell-qty"><input class="mini-in" type="number" min="0" max="${have}" value="${p.qty || ''}" placeholder="0" data-sq="${esc(g.hashName)}"><button class="btn ghost small" data-sall="${esc(g.hashName)}">${esc(t('pnl_max'))}</button></span></td>
+				<td class="num"><input class="mini-in wide" type="number" ${priceIn(c)} value="${p.price || ''}" data-sp="${esc(g.hashName)}"></td>
+				<td class="num" data-sget="${esc(g.hashName)}">${get}${sellProfit(g.hashName)}</td></tr>
+				${q === 'loading' ? `<tr class="sell-detail"><td colspan="6"><div class="sell-quote loading"><div class="sq-stats">${Array.from({ length: 4 }, () => '<div><span class="skeleton" style="height:12px;width:90px"></span><b class="skeleton" style="height:18px;width:110px;margin-top:6px;display:block"></b></div>').join('')}</div><div class="skeleton" style="height:44px;width:240px"></div><div class="muted small">${esc(t('m_q_loading'))}</div></div></td></tr>` : ''}
+				${open ? `<tr class="sell-detail"><td colspan="6"><div class="sell-quote">
+					<div class="sq-stats">
+						<div><span>${esc(t('m_q_lowest'))}</span><b>${q.lowestSell != null ? money(q.lowestSell) + ' ' + esc(c) : '—'}</b><em>${esc(t('m_q_listings', { n: fmt(q.sellOrders) }))}</em></div>
+						<div><span>${esc(t('m_q_order'))}</span><b>${q.highestBuy != null ? money(q.highestBuy) + ' ' + esc(c) : '—'}</b><em>${esc(t('m_q_orders', { n: fmt(q.buyOrders) }))}</em></div>
+						<div><span>${esc(t('m_q_median'))}</span><b>${q.median != null ? money(q.median) + ' ' + esc(c) : '—'}</b><em>${esc(t('m_q_volume', { n: fmt(q.volume) }))}</em></div>
+						<div><span>${esc(t('m_q_bought'))}</span><b>${q.avgCost != null ? money(q.avgCost) + ' ' + esc(c) : '—'}</b><em>${esc(t('m_q_bought_sub'))}</em></div>
+					</div>
+					<div class="sq-body"><div class="bo-book">${boBook(q.asks, q.sellOrders, 'ask', c, 'slvl')}${boBook(q.bids, q.buyOrders, 'bid', c, 'slvl')}</div>${priceChart(q.history, c, 'sellChartMine')}</div>
+					<div class="sq-presets">
+						${q.lowestSell != null ? `<button class="btn ghost small" data-preset="undercut" data-pn="${esc(g.hashName)}">${esc(isWhole(c) ? t('m_p_undercut_u', { c }) : t('m_p_undercut'))} · ${pmoney(roundPrice(q.lowestSell - tick(c), c, 'down'), c)}</button>` : ''}
+						${q.median != null ? `<button class="btn ghost small" data-preset="median" data-pn="${esc(g.hashName)}">${esc(t('m_p_median'))} · ${pmoney(roundPrice(q.median, c), c)}</button>` : ''}
+						${q.highestBuy != null ? `<button class="btn ghost small" data-preset="order" data-pn="${esc(g.hashName)}" title="${esc(t('m_p_order_hint'))}">${esc(t('m_p_order'))} · ${pmoney(q.highestBuy, c)}</button>` : ''}
+						<button class="btn ghost small" data-open="${esc(mkt)}">${esc(t('m_open_market'))} ↗</button>
+					</div></div></td></tr>` : ''}`;
+		}).join('')}</tbody></table>`;
+}
+// Открытая котировка продажи: пунктир выбранной цены на графике и подсветка уровня стакана
+function sellMark() {
+	if (!ui.sell || !ui.sell.open) return;
+	const p = (ui.sell.picks[ui.sell.open] || {}).price || 0;
+	markChart('sellChartMine', p);
+	document.querySelectorAll('#marketTable [data-slvl]').forEach(b => b.classList.toggle('on', Number(b.dataset.slvl) === p));
+}
+// «вы получите» минус средняя цена покупки из «Портфеля»
+function sellProfit(name) {
+	const p = ui.sell.picks[name] || {}, q = ui.sell.quotes[name];
+	if (!(p.price > 0) || !q || q === 'loading' || q.avgCost == null) return '';
+	const d = sellReceive(p.price) - q.avgCost;
+	return `<div class="sub ${signCls(d)}">${esc(t('m_profit_each', { v: (d > 0 ? '+' : '') + money(d) }))}</div>`;
+}
+async function loadQuote(name) {
+	if (ui.sell.quotes[name] && ui.sell.quotes[name] !== 'loading') { ui.sell.open = ui.sell.open === name ? null : name; renderMarket(); return; }
+	ui.sell.quotes[name] = 'loading'; renderMarket();
+	try {
+		const q = await apiGet(`/api/market/quote?appid=${ui.sell.appid}&name=${encodeURIComponent(name)}`);
+		ui.sell.quotes[name] = q; ui.sell.open = name;
+		const pick = ui.sell.picks[name] || (ui.sell.picks[name] = { qty: 0, price: 0 });
+		if (!pick.price && q.lowestSell) pick.price = roundPrice(q.lowestSell - tick(ui.sell.currency), ui.sell.currency, 'down');  // на шаг (цент или целую единицу) ниже самого дешёвого лота
+	} catch (e) { delete ui.sell.quotes[name]; toast(e.message, 'bad'); }
+	renderMarket();
 }
 
 async function loadSellable() {
 	try {
-		const items = await apiGet('/api/market/sellable');
-		ui.sell = { items, picks: {}, prices: {}, currency: (ui.store && ui.store.currency) || ((activeAccount() || {}).currency) || '' };
+		const appid = (ui.sell && ui.sell.appid) || ui.sellAppid || 730;
+		const items = await apiGet('/api/market/sellable?appid=' + appid);
+		ui.sell = { appid, items, picks: {}, quotes: {}, open: null, currency: (ui.store && ui.store.currency) || ((activeAccount() || {}).currency) || '' };
 		if (!ui.sell.currency && ui.state && ui.state.wallet) ui.sell.currency = ui.state.wallet.currency;
 		if (ui.mtab === 'sell') renderMarket();
 	} catch (e) { $('marketTable').innerHTML = `<div class="empty-box">${esc(e.message)}</div>`; }
 }
 
-async function loadPrice(hashName) {
-	ui.sell.prices[hashName] = 'loading'; renderMarket();
-	try {
-		const p = await apiGet('/api/market/price?name=' + encodeURIComponent(hashName));
-		ui.sell.prices[hashName] = p;
-		const pick = ui.sell.picks[hashName] || (ui.sell.picks[hashName] = { qty: 0, price: 0 });
-		if (!pick.price && p.lowest) pick.price = Math.max(0.03, Math.round((p.lowest - 0.01) * 100) / 100);  // на цент ниже минимальной
-	} catch (e) { delete ui.sell.prices[hashName]; toast(e.message, 'bad'); }
-	renderMarket();
-}
-
 async function sellNow() {
 	const items = [];
 	let total = 0;
+	const fromCaskets = {};
+	let count = 0;
 	for (const g of ui.sell.items) {
 		const p = ui.sell.picks[g.hashName];
 		if (!p || !(p.qty > 0) || !(p.price > 0)) continue;
-		for (const assetid of g.assetids.slice(0, p.qty)) { items.push({ assetid, buyerPays: p.price }); total += sellReceive(p.price); }
+		for (const assetid of g.assetids.slice(0, p.qty)) { items.push({ assetid, buyerPays: p.price, appid: g.appid, contextid: g.contextid }); total += sellReceive(p.price); count++; }
+		const rest = Math.min(p.qty - Math.min(p.qty, g.assetids.length), g.stored || 0);  // не хватает в инвентаре — берём из ящиков
+		if (rest > 0) { fromCaskets[g.hashName] = { qty: rest, price: p.price }; total += rest * sellReceive(p.price); count += rest; }
 	}
-	if (!items.length) return;
-	if (!(await miniConfirm({ title: t('m_sell'), text: t('m_sell_confirm', { n: items.length, total: money(total), currency: ui.sell.currency }) })).ok) return;
+	if (!count) return;
+	const fromN = Object.values(fromCaskets).reduce((a, x) => a + x.qty, 0);
+	if (!(await askConfirm('sell', { title: t('m_sell'), text: t('m_sell_confirm', { n: count, total: money(total), currency: ui.sell.currency }) + (fromN ? ' ' + t('m_sell_from_caskets', { n: fmt(fromN) }) : '') })).ok) return;
 	$('mBulk').disabled = true;
-	toast(t('m_selling', { n: items.length }));
+	toast(t('m_selling', { n: count }));
 	try {
-		const r = await apiPost('/api/market/sell', { items });
+		const r = await apiPost('/api/market/sell', { items, fromCaskets });
 		toast(t('m_sold_result', { n: r.listed }) + (r.confirmed ? ' · ' + t('m_auto_confirmed', { n: r.confirmed }) : r.needsConfirmation ? ' · ' + t('trade_need_confirm') : ''), r.failed.length ? 'bad' : 'good');
 		if (r.failed.length) toast(r.failed[0].error, 'bad');
-		ui.sell = null; ui.market = null; await loadMarket();
+		ui.sellAppid = ui.sell.appid; ui.sell = null; ui.market = null; await loadMarket();
 	} catch (e) { toast(e.message, 'bad'); }
 	finally { $('mBulk').disabled = false; }
 }
@@ -1603,22 +2588,56 @@ document.querySelector('.market-stats').addEventListener('click', e => { const b
 $('marketSearch').addEventListener('input', renderMarket);
 $('marketTable').addEventListener('click', e => {
 	const d = e.target.dataset;
-	if (d.mremove) miniConfirm({ text: t('m_remove_confirm') }).then(r => r.ok && marketAct('/api/market/remove', { id: d.mremove }, t('m_removed')));
-	if (d.mcancel) miniConfirm({ text: t('m_cancel_confirm') }).then(r => r.ok && marketAct('/api/market/cancelorder', { id: d.mcancel }, t('m_cancelled')));
+	if (d.mremove) askConfirm('mremove', { text: t('m_remove_confirm') }).then(r => r.ok && marketAct('/api/market/remove', { id: d.mremove }, t('m_removed')));
+	if (d.mcancel) askConfirm('mremove', { text: t('m_cancel_confirm') }).then(r => r.ok && marketAct('/api/market/cancelorder', { id: d.mcancel }, t('m_cancelled')));
 	if (d.callow) marketAct('/api/confirmations', { ids: [d.callow], accept: true }, t('m_confirmed'));
 	if (d.cdeny) marketAct('/api/confirmations', { ids: [d.cdeny], accept: false }, t('m_denied'));
 	if (e.target.id === 'mMore') { e.target.disabled = true; loadHistory(ui.history.rows.length); }
-	if (d.mprice) loadPrice(d.mprice);
+	if (e.target.id === 'boNew') { openBuyOrder(); return; }
+	const ob = e.target.closest('[data-open]');
+	if (ob) { openExt(ob.dataset.open); return; }
+	const qb = e.target.closest('[data-mquote]');
+	if (qb) loadQuote(qb.dataset.mquote);
+	const lv = e.target.closest('[data-slvl]');
+	if (lv && ui.sell && ui.sell.open) {   // уровень стакана — взять его цену
+		const pick = ui.sell.picks[ui.sell.open] || (ui.sell.picks[ui.sell.open] = { qty: 0, price: 0 });
+		pick.price = roundPrice(Number(lv.dataset.slvl), ui.sell.currency);
+		if (!pick.qty) pick.qty = 1;
+		renderMarket();
+	}
+	const pb = e.target.closest('[data-preset]');
+	if (pb) {
+		const name = pb.dataset.pn, q = ui.sell.quotes[name];
+		const pick = ui.sell.picks[name] || (ui.sell.picks[name] = { qty: 0, price: 0 });
+		const c = ui.sell.currency;
+		pick.price = pb.dataset.preset === 'undercut' ? roundPrice(q.lowestSell - tick(c), c, 'down') : roundPrice(pb.dataset.preset === 'median' ? q.median : q.highestBuy, c);
+		if (!pick.qty) pick.qty = 1;
+		renderMarket();
+	}
+	const all = e.target.closest('[data-sall]');
+	if (all) {
+		const g = ui.sell.items.find(x => x.hashName === all.dataset.sall);
+		const pick = ui.sell.picks[g.hashName] || (ui.sell.picks[g.hashName] = { qty: 0, price: 0 });
+		pick.qty = g.count + (g.stored || 0);
+		renderMarket();
+	}
+});
+$('marketTable').addEventListener('change', e => {
+	// без копеек: введённую цену сразу показываем округлённой
+	if (e.target.dataset.sp && ui.sell) { const p = ui.sell.picks[e.target.dataset.sp]; if (p && p.price > 0) e.target.value = p.price; }
+	if (e.target.id === 'mGame') { ui.sellAppid = Number(e.target.value); ui.sell = null; renderMarket(); }
+	if (e.target.id === 'mAutoConfirm') saveSetting({ marketAutoConfirm: e.target.checked });
 });
 $('marketTable').addEventListener('input', e => {
 	const d = e.target.dataset, name = d.sq || d.sp;
 	if (!name || !ui.sell) return;
 	const g = ui.sell.items.find(x => x.hashName === name);
 	const p = ui.sell.picks[name] || (ui.sell.picks[name] = { qty: 0, price: 0 });
-	if (d.sq) p.qty = Math.max(0, Math.min(g.count, Math.floor(Number(e.target.value) || 0)));
-	if (d.sp) p.price = Math.max(0, Number(e.target.value) || 0);
+	if (d.sq) p.qty = Math.max(0, Math.min(g.count + (g.stored || 0), Math.floor(Number(e.target.value) || 0)));
+	if (d.sp) p.price = roundPrice(Math.max(0, Number(e.target.value) || 0), ui.sell.currency) || 0;
 	const cell = document.querySelector(`[data-sget="${CSS.escape(name)}"]`);
-	if (cell) cell.textContent = p.price > 0 ? `${money(sellReceive(p.price))} ${ui.sell.currency}` : '—';
+	if (cell) cell.innerHTML = (p.price > 0 ? `${money(sellReceive(p.price))} ${esc(ui.sell.currency)}` : '—') + sellProfit(name);
+	if (name === ui.sell.open) sellMark();
 	const n = Object.values(ui.sell.picks).reduce((a, x) => a + (x.qty > 0 && x.price > 0 ? x.qty : 0), 0);
 	$('mBulk').classList.toggle('hidden', !n);
 	if (n) $('mBulk').textContent = t('m_sell_go', { n });
@@ -1628,6 +2647,126 @@ $('mBulk').addEventListener('click', () => {
 	const q = ($('marketSearch').value || '').toLowerCase();
 	const ids = (ui.market.confirmations || []).filter(c => !q || (c.title + ' ' + c.summary.join(' ')).toLowerCase().includes(q)).map(c => c.id);
 	if (ids.length) miniConfirm({ title: t('m_confirm_all', { n: ids.length }), text: t('guard_confirm_all') }).then(r => r.ok && marketAct('/api/confirmations', { ids, accept: true }, t('m_confirmed')));
+});
+
+// ---------------- ордер на покупку: стакан (лоты и ордера), график за 30 дней, место в очереди
+function boCur() { return (ui.bo && ui.bo.quote && ui.bo.quote.currency) || (ui.state && ui.state.wallet && ui.state.wallet.currency) || ''; }
+function boSetStep() {
+	const c = boCur();
+	$('boPrice').step = tick(c); $('boPrice').min = minPrice(c); $('boPrice').placeholder = isWhole(c) ? '0' : '0.00';
+}
+function openBuyOrder(name) {
+	ui.bo = { quote: null };
+	$('boName').value = name || '';
+	$('boPrice').value = ''; $('boQty').value = 1;
+	$('boQuote').classList.add('hidden'); $('boQuote').innerHTML = '';
+	boSetStep();
+	boTotal();
+	$('boModal').classList.remove('hidden');
+	if (name) boLoadQuote(name); else $('boName').focus();
+}
+function boTotal() {
+	const c = boCur();
+	const p = roundPrice(Number($('boPrice').value) || 0, c) || 0, q = Math.max(1, Math.floor(Number($('boQty').value) || 1));
+	$('boTotal').textContent = p > 0 ? `${money(p * q)} ${c}` : '—';
+	const bal = ui.state && ui.state.wallet ? ui.state.wallet.balance : null;
+	$('boTotal').classList.toggle('bad-text', bal != null && p * q > bal);
+	// где окажется ордер: лот уходит самому старому ордеру с ценой ≥ лота, так что впереди — все ордера не дешевле
+	const Q = ui.bo && ui.bo.quote, note = $('boQueue');
+	let txt = '';
+	if (Q && p > 0) {
+		if (Q.lowestSell != null && p >= Q.lowestSell) txt = t('bo_instant');
+		else if (Q.bids && Q.bids.length) { const ahead = Q.bids.filter(x => x.price >= p).reduce((n, x) => n + x.qty, 0); txt = ahead ? t('bo_queue', { n: fmt(ahead) }) : t('bo_first'); }
+	}
+	note.textContent = txt; note.classList.toggle('hidden', !txt);
+	document.querySelectorAll('#boQuote [data-bo]').forEach(b => b.classList.toggle('on', Number(b.dataset.bo) === p));
+	markChart('boChartMine', p);
+}
+// График средних цен по дням + пунктир вашей цены (id — для markChart; общий для ордера и продажи)
+const charts = {};
+function priceChart(hist, c, id) {
+	charts[id] = null;
+	if (!hist || hist.length < 2) return `<div class="bo-chart-empty muted small">${esc(t('pv_history_empty'))}</div>`;
+	const W = 520, H = 72, v = hist.map(h => h.price), lo = Math.min(...v), hi = Math.max(...v), span = (hi - lo) || hi * 0.1 || 1;
+	const y = p => (H - 6 - (p - lo) / span * (H - 14)).toFixed(1);
+	const pts = v.map((p, i) => `${(i / (v.length - 1) * W).toFixed(1)},${y(p)}`);
+	charts[id] = { lo, span, H };
+	return `<div class="bo-chart ${v[v.length - 1] >= v[0] ? 'up' : 'down'}"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+		<polygon points="0,${H} ${pts.join(' ')} ${W},${H}" fill="currentColor" opacity=".12"/>
+		<polyline points="${pts.join(' ')}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/>
+		<line id="${id}" x1="0" x2="${W}" y1="-10" y2="-10" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/></svg>
+		<div class="bo-chart-l"><span>${esc(pmoney(hi, c))}</span><span>${esc(pmoney(lo, c))}</span></div>
+		<div class="bo-chart-b muted"><span>${esc(t('m_q_30d'))}</span><span>${esc(t('bo_chart_last'))}: <b>${esc(pmoney(v[v.length - 1], c))} ${esc(c)}</b></span></div></div>`;
+}
+function markChart(id, p) {
+	const line = document.getElementById(id), ch = charts[id];
+	if (!line || !ch) return;
+	const yy = p > 0 ? ch.H - 6 - (p - ch.lo) / ch.span * (ch.H - 14) : -10;
+	const v = yy < 0 || yy > ch.H ? -10 : yy;
+	line.setAttribute('y1', v); line.setAttribute('y2', v);
+}
+// Колонка стакана: цена · штук, полоса — накопленная глубина
+function boBook(levels, total, side, c, attr = 'bo') {
+	if (!levels || !levels.length) return `<div class="bo-book-col"><div class="bo-book-h">${esc(t(side === 'ask' ? 'bo_asks' : 'bo_bids'))}</div><div class="muted small bo-book-empty">${esc(t('bo_book_empty'))}</div></div>`;
+	const rows = levels.slice(0, 5);
+	let acc = 0; const cum = rows.map(r => (acc += r.qty));
+	const max = cum[cum.length - 1] || 1;
+	const shown = cum[cum.length - 1], rest = Math.max(0, (total || 0) - shown);
+	return `<div class="bo-book-col ${side}"><div class="bo-book-h">${esc(t(side === 'ask' ? 'bo_asks' : 'bo_bids'))}<em>${esc(fmt(total || shown))}</em></div>
+		${rows.map((r, i) => `<button class="bo-lvl" data-${attr}="${r.price}" title="${esc(t('bo_lvl_pick'))}"><i style="width:${(cum[i] / max * 100).toFixed(1)}%"></i><span>${esc(pmoney(r.price, c))}</span><b>${esc(fmt(r.qty))}</b></button>`).join('')}
+		${rest > 0 ? `<div class="bo-book-more muted">${esc(t('bo_book_more', { n: fmt(rest) }))}</div>` : ''}</div>`;
+}
+async function boLoadQuote(name) {
+	$('boQuote').classList.remove('hidden');
+	$('boQuote').innerHTML = `<div class="bo-loading"><span class="spinner tiny"></span> ${esc(t('m_q_loading'))}</div>`;
+	try {
+		const q = await apiGet(`/api/market/quote?appid=730&name=${encodeURIComponent(name)}`);
+		if ($('boName').value !== name) return;
+		ui.bo.quote = q;
+		boSetStep();
+		const c = q.currency, mkt = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(name)}`;
+		const outbid = q.highestBuy != null ? roundPrice(q.highestBuy + tick(c), c) : null;
+		$('boQuote').innerHTML = `<div class="sq-stats bo-stats">
+				<div><span>${esc(t('m_q_order'))}</span><b>${q.highestBuy != null ? pmoney(q.highestBuy, c) + ' ' + esc(c) : '—'}</b><em>${esc(t('m_q_orders', { n: fmt(q.buyOrders) }))}</em></div>
+				<div><span>${esc(t('m_q_lowest'))}</span><b>${q.lowestSell != null ? pmoney(q.lowestSell, c) + ' ' + esc(c) : '—'}</b><em>${esc(t('m_q_listings', { n: fmt(q.sellOrders) }))}</em></div>
+				<div><span>${esc(t('m_q_median'))}</span><b>${q.median != null ? money(q.median) + ' ' + esc(c) : '—'}</b><em>${esc(t('m_q_volume', { n: fmt(q.volume) }))}</em></div>
+			</div>
+			<div class="bo-book">${boBook(q.asks, q.sellOrders, 'ask', c)}${boBook(q.bids, q.buyOrders, 'bid', c)}</div>
+			${priceChart(q.history, c, 'boChartMine')}
+			<div class="bo-presets">
+				${outbid != null ? `<button class="btn ghost small" data-bo="${outbid}">${esc(isWhole(c) ? t('bo_p_outbid_u', { c }) : t('bo_p_outbid'))} · ${pmoney(outbid, c)}</button>` : ''}
+				${q.highestBuy != null ? `<button class="btn ghost small" data-bo="${q.highestBuy}">${esc(t('bo_p_same'))} · ${pmoney(q.highestBuy, c)}</button>` : ''}
+				${q.median != null ? `<button class="btn ghost small" data-bo="${roundPrice(q.median, c)}">${esc(t('m_p_median'))} · ${pmoney(roundPrice(q.median, c), c)}</button>` : ''}
+				<button class="btn ghost small" data-open="${esc(mkt)}">${esc(t('m_open_market'))} ↗</button>
+				${isWhole(c) ? `<span class="sell-whole small bo-whole" title="${esc(t('cur_whole', { c }))}">${esc(t('cur_whole_short', { c }))}</span>` : ''}
+			</div>`;
+		if (!$('boPrice').value && outbid != null) $('boPrice').value = outbid;
+		boTotal();
+	} catch (e) { $('boQuote').innerHTML = `<div class="muted small">${esc(e.message)}</div>`; }
+}
+combo($('boName'), { source: q => (q.length < 2 ? [] : apiGet('/api/market/search?q=' + encodeURIComponent(q))), onPick: x => { $('boPrice').value = ''; boLoadQuote(x.name); } });
+$('boQuote').addEventListener('click', e => {
+	const b = e.target.closest('[data-bo]'); if (b) { $('boPrice').value = b.dataset.bo; boTotal(); }
+	const o = e.target.closest('[data-open]'); if (o) openExt(o.dataset.open);
+});
+$('boPrice').addEventListener('input', boTotal);
+$('boPrice').addEventListener('change', () => { const v = roundPrice(Number($('boPrice').value) || 0, boCur()); if (v > 0) $('boPrice').value = v; boTotal(); });
+$('boQty').addEventListener('input', boTotal);
+$('boCancel').addEventListener('click', () => $('boModal').classList.add('hidden'));
+$('boCreate').addEventListener('click', async () => {
+	const c = boCur();
+	const name = $('boName').value.trim(), price = roundPrice(Number($('boPrice').value), c), qty = Math.floor(Number($('boQty').value));
+	if (!name || !(price >= minPrice(c)) || !(qty >= 1)) return toast(t('bo_check'), 'bad');
+	// деньги резервируются — подтверждение обязательно, без «больше не показывать»
+	const r = await miniConfirm({ icon: ICON_WALLET, title: t('bo_title'), text: t('bo_confirm', { n: qty, name, price: `${money(price)} ${c}`, total: `${money(price * qty)} ${c}` }), ok: t('bo_create') });
+	if (!r.ok) return;
+	$('boCreate').disabled = true;
+	try {
+		const x = await apiPost('/api/market/buyorder', { appid: 730, name, price, quantity: qty });
+		if (x.ok) { toast(t('bo_done'), 'good'); $('boModal').classList.add('hidden'); ui.market = null; loadMarket(); }
+		else toast(x.message || t('bo_check'), 'bad');
+	} catch (e) { toast(e.message, 'bad'); }
+	$('boCreate').disabled = false;
 });
 
 // ============================================================ Steam Guard (мини-SDA)
@@ -1684,8 +2823,8 @@ function renderGuard() {
 		const px = !a.proxy ? '' : a.proxyStatus ? (a.proxyStatus.ok ? `<span class="g-proxy-ok">● ${esc(t('proxy_ok'))}</span>` : `<span class="g-proxy-bad">● ${esc(t('proxy_bad'))}</span>`) : `<span class="muted">● ${esc(t('proxy_label'))}</span>`;
 		return `<div class="g-acc ${a.login === ui.guardSel ? 'sel' : ''}" data-gacc="${esc(a.login)}">
 			${avatarHtml(a)}
-			<div style="min-width:0"><div class="strong" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.personaName || a.login)}</div>
-				<div class="sub">${a.online ? `<span class="g-proxy-ok">● ${esc(t('online'))}</span>` : `<span>${esc(a.login)}</span>`}${px}${a.wallet ? `<span class="good-text">${money(a.wallet.balance)} ${esc(a.wallet.currency)}</span>` : ''}</div></div>
+			<div style="min-width:0"><div class="strong" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(accName(a))}</div>
+				<div class="sub">${a.online ? `<span class="g-proxy-ok">● ${esc(t('online'))}</span>` : `<span>${esc(accSub(a) || (streamer() ? '' : a.login))}</span>`}${px}${a.wallet ? `<span class="good-text">${esc(walletText(a.wallet))}</span>` : ''}</div></div>
 			${code ? `<div style="text-align:right"><div class="g-code" data-gcode="${esc(a.login)}" data-gcopy="${esc(a.login)}" title="${esc(t('copy'))}">${esc(code)}</div><div class="g-ring"><i data-gring></i></div></div>`
 				: `<button class="btn ghost small" data-gadd="${esc(a.login)}">${esc(t('guard_add_mafile'))}</button>`}
 		</div>`;
@@ -1699,7 +2838,7 @@ function renderGuardDetail() {
 	if (!a) { $('guardDetail').innerHTML = `<div class="empty-box">${esc(t('guard_pick'))}</div>`; return; }
 	const code = g.codes.codes[a.login];
 	const conf = g.conf[a.login];
-	const head = `<div class="g-head">${avatarHtml(a)}<div style="flex:1"><div class="strong">${esc(a.personaName || a.login)}</div><div class="muted small">${esc(a.login)}${a.proxy ? ` · ${esc(t('proxy_label'))}: ${a.proxyStatus ? (a.proxyStatus.ok ? t('proxy_ok') : `<span class="g-proxy-bad">${esc(t('proxy_bad'))}</span>`) : '…'}` : ''}</div></div>
+	const head = `<div class="g-head">${avatarHtml(a)}<div style="flex:1"><div class="strong">${esc(accName(a))}</div><div class="muted small">${esc(streamer() ? '' : a.login)}${a.proxy ? ` · ${esc(t('proxy_label'))}: ${a.proxyStatus ? (a.proxyStatus.ok ? t('proxy_ok') : `<span class="g-proxy-bad">${esc(t('proxy_bad'))}</span>`) : '…'}` : ''}</div></div>
 		${a.proxy ? `<button class="btn ghost small" data-gproxy="${esc(a.login)}">${esc(t('proxy_check'))}</button>` : ''}</div>`;
 	if (!code) {
 		$('guardDetail').innerHTML = head + `<div class="g-add"><div class="strong">${esc(t('guard_no_mafile_t'))}</div>
@@ -1729,7 +2868,7 @@ function renderGuardConf() {
 	else if (conf.error) confHtml = `<div class="empty-box">${esc(conf.error)}</div>`;
 	else if (!conf.list.length) confHtml = `<div class="empty-box">${esc(t('m_no_confirm'))}</div>`;
 	else confHtml = conf.list.map(c => `<div class="g-conf">${c.icon ? `<img src="${esc(c.icon)}" alt="">` : '<span></span>'}
-		<div style="min-width:0"><div class="strong">${esc(c.title)}</div><div class="muted small">${esc(c.typeName || '')} · ${esc(c.summary.join(' · '))} · ${esc(tsDate(c.time))}</div></div>
+		<div style="min-width:0"><div class="strong pii">${esc(c.title)}</div><div class="muted small">${esc(c.typeName || '')} · ${esc(c.summary.join(' · '))} · ${esc(tsDate(c.time))}</div></div>
 		<div class="acts"><button class="btn ghost small" data-gdeny="${esc(c.id)}">${esc(t('decline'))}</button><button class="btn good small" data-gallow="${esc(c.id)}">${esc(t('confirm'))}</button></div></div>`).join('');
 	box.innerHTML = `
 		<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><div class="section-title" style="flex:1">${esc(t('m_confirm'))}${conf && conf.list ? ` · ${conf.list.length}` : ''}${conf && conf.loading ? ' <span class="spinner tiny"></span>' : ''}</div>
@@ -1781,7 +2920,7 @@ $('guardMaFileInput').addEventListener('change', e => {
 		try {
 			const ma = JSON.parse(r.result);
 			await api('/api/guard/mafile', { login: ui.guardAddFor, maFile: ma });
-			toast(t('guard_mafile_added', { login: ui.guardAddFor }), 'good');
+			toast(t('guard_mafile_added', { login: loginName(ui.guardAddFor) }), 'good');
 			ui.guardSel = ui.guardAddFor; loadGuard();
 		} catch (err) { toast(err.message || t('mafile_bad'), 'bad'); }
 	};
@@ -1794,7 +2933,7 @@ function handleAlerts(alerts) {
 	if (!alerts || !alerts.length) return;
 	if (ui.alertSeen == null) { ui.alertSeen = alerts[alerts.length - 1].id; return; }  // старые не показываем
 	for (const a of alerts.filter(x => x.id > ui.alertSeen)) {
-		const text = a.kind === 'proxy_bad' ? t('alert_proxy_bad', { login: a.login }) : t('alert_proxy_ok', { login: a.login });
+		const text = a.kind === 'proxy_bad' ? t('alert_proxy_bad', { login: loginName(a.login) }) : t('alert_proxy_ok', { login: loginName(a.login) });
 		toast(text + (a.error ? ` — ${a.error}` : ''), a.kind === 'proxy_bad' ? 'bad' : 'good');
 		try { if (a.kind === 'proxy_bad' && window.Notification && Notification.permission !== 'denied') new Notification('Caskit', { body: text }); } catch (e) { /* без системных уведомлений */ }
 	}
@@ -1804,6 +2943,7 @@ function handleAlerts(alerts) {
 
 // ============================================================ первый запуск: приветствие и гайд
 const GITHUB_URL = 'https://github.com/pythonMaster2002/cs2-storage-manager';
+document.querySelectorAll('[data-gh]').forEach(b => b.addEventListener('click', () => openExt(GITHUB_URL)));  // ссылки на репозиторий в настройках
 
 function maybeWelcome() {
 	if (ui.settings.welcomed) return;
@@ -1888,8 +3028,8 @@ async function copyText(text) {
 	toast(t('copied'), 'good');
 }
 
-async function openSupport() {
-	$('supportModal').classList.remove('hidden');
+// Реквизиты поддержки: одно и то же в окне «Поддержать» и в «Настройки → Caskit»
+async function renderSupport(box) {
 	if (!ui.support) { try { ui.support = await api('/api/support'); } catch (e) { ui.support = {}; } }
 	const s = ui.support, rows = [];
 	if (s.steamTrade) rows.push(`<div class="sup"><div class="grow"><div class="strong">${esc(t('sup_skin'))}</div><div class="muted small">${esc(t('sup_skin_hint'))}</div></div><button class="btn primary small" data-open="${esc(s.steamTrade)}">${esc(t('sup_skin_btn'))}</button></div>`);
@@ -1899,36 +3039,16 @@ async function openSupport() {
 		rows.push(`<div class="sup"><img class="qr" data-qr="${esc(c.address)}" alt=""><div class="grow"><div class="strong">${esc(c.label)}</div><div class="addr">${esc(c.address)}</div><div class="muted small" style="margin-top:4px">${esc(t('sup_crypto_hint'))}</div></div><button class="btn ghost small" data-copy="${esc(c.address)}">${esc(t('copy'))}</button></div>`);
 	}
 	if (s.github) rows.push(`<div class="sup"><div class="grow"><div class="strong">GitHub ★</div><div class="muted small">${esc(t('sup_star_hint'))}</div></div><button class="btn ghost small" data-open="${esc(s.github)}">GitHub</button></div>`);
-	$('supportList').innerHTML = rows.join('') || `<div class="empty-box">—</div>`;
-	for (const img of document.querySelectorAll('#supportList [data-qr]')) {
+	box.innerHTML = rows.join('') || `<div class="empty-box">—</div>`;
+	for (const img of box.querySelectorAll('[data-qr]')) {
 		api('/api/qr?text=' + encodeURIComponent(img.dataset.qr)).then(r => { img.src = r.dataUrl; }).catch(() => img.remove());
 	}
 }
-
-// Мягкое напоминание после полезного действия: не чаще раза в 3 дня, отключается в настройках.
-// Напоминание о поддержке — только после успешной перекладки, не чаще раза в сутки,
-// с галочкой «больше не показывать» (вернуть можно в настройках).
-function nudgeSupport(reasonText) {
-	const st = ui.settings || {};
-	if (st.supportHideNudges || Date.now() - (st.supportNudgeAt || 0) < 86400e3) return;
-	saveSetting({ supportNudgeAt: Date.now() });
-	const el = document.createElement('div');
-	el.className = 'toast good nudge';
-	el.innerHTML = `<div>${esc(reasonText)}</div>
-		<div class="nudge-row"><button class="btn support-btn small">♥ ${esc(t('support_short'))}</button>
-		<label class="check small"><input type="checkbox"> <span>${esc(t('dont_show_again'))}</span></label>
-		<button class="nudge-x" title="${esc(t('close'))}">×</button></div>`;
-	const close = () => { if (el.querySelector('input').checked) saveSetting({ supportHideNudges: true }); el.remove(); };
-	el.querySelector('.support-btn').onclick = () => { close(); openSupport(); };
-	el.querySelector('.nudge-x').onclick = close;
-	$('toasts').appendChild(el);
-	setTimeout(() => { if (el.isConnected) close(); }, 20000);
-}
+function openSupport() { $('supportModal').classList.remove('hidden'); renderSupport($('supportList')); }
 
 $('loginSupport').addEventListener('click', openSupport);
-$('settingsSupport').addEventListener('click', () => { $('settingsModal').classList.add('hidden'); openSupport(); });
 $('supportClose').addEventListener('click', () => $('supportModal').classList.add('hidden'));
-$('supportList').addEventListener('click', e => {
+for (const box of [$('supportList'), $('setSupportList')]) box.addEventListener('click', e => {
 	const b = e.target.closest('[data-open],[data-copy]'); if (!b) return;
 	if (b.dataset.open) openExt(b.dataset.open);
 	if (b.dataset.copy) copyText(b.dataset.copy);
@@ -1961,13 +3081,52 @@ function renderStickers() {
 		const empty = free.map(i => sel ? `<div class="st-slot target" data-put="${esc(w.id)}" data-slot="${i}">+ ${esc(t('st_put'))}</div>` : `<div class="st-slot"><span class="muted">${i + 1}</span></div>`);
 		const slots = [...placed, ...empty].join('');
 		const acts = [
-			w.inspect ? `<button class="btn ghost small" data-insp-game="${esc(w.inspect)}">${esc(t('inspect_game'))}</button><button class="btn ghost small" data-insp-copy="${esc(w.inspect)}">${esc(t('copy_link'))}</button>` : '',
+			w.inspect ? `<button class="btn ghost small" data-insp-game="${esc(w.inspect)}">${esc(t('inspect_game'))}</button>` : '',
 			w.invLink ? `<button class="btn ghost small" data-open-inv="${esc(w.invLink)}">${esc(t('st_in_inventory'))}</button>` : '',
 		].join('');
 		const fl = w.float != null ? `<div class="st-float"><span class="muted small">float ${fl4(w.float)}</span>${floatBar(w.float, { cls: 'sm' })}</div>` : '';
-		return `<div class="st-w">${w.image ? `<img src="${esc(w.image)}" alt="" loading="lazy">` : '<span class="ph"></span>'}<div><div class="st-wh"><span class="strong">${esc(w.name)}</span>${acts ? `<span class="st-insp">${acts}</span>` : ''}</div>${fl}<div class="st-slots">${slots}</div></div></div>`;
+		return `<div class="st-w"><button class="st-view" data-view="${esc(w.id)}" title="${esc(t('iv_open'))}">${w.image ? `<img src="${esc(w.image)}" alt="" loading="lazy">` : '<span class="ph"></span>'}<span class="st-view-ico">⤢</span></button><div><div class="st-wh"><span class="strong st-view-name" data-view="${esc(w.id)}">${esc(w.name)}</span>${acts ? `<span class="st-insp">${acts}</span>` : ''}</div>${fl}<div class="st-slots">${slots}</div></div></div>`;
 	}).join('') : `<div class="empty-box">${esc(t('st_no_weapons'))}</div>`;
 }
+
+// ---------------- «Как в игре»: большая карточка скина — износ, паттерн, наклейки (с износом) и брелок
+const EXT_NAMES = [[0.07, 'Factory New'], [0.15, 'Minimal Wear'], [0.38, 'Field-Tested'], [0.45, 'Well-Worn'], [1.01, 'Battle-Scarred']];
+function openItemView(w) {
+	if (!w) return;
+	if ($('ivModal').nextElementSibling) document.body.appendChild($('ivModal'));  // поверх других окон (например, итога контракта)
+	const color = RARITY_COLORS[w.rarity] || '#4b69ff';
+	$('ivCard').style.setProperty('--rc', color);
+	const big = w.image ? w.image.replace(/\/\d+fx\d+f$/, '/512fx384f') : '';
+	// наклейки — колонкой сбоку от оружия (точных координат на модели у нас нет), прозрачность — по износу
+	const stk = w.stickers.map(s => `<div class="iv-stk" title="${esc(s.name)} · ${Math.round(s.wear * 100)}%">
+		${s.image ? `<img src="${esc(s.image)}" alt="" style="opacity:${(1 - s.wear * 0.75).toFixed(2)};filter:grayscale(${(s.wear * 0.7).toFixed(2)}) drop-shadow(0 3px 6px rgba(0,0,0,.5))">` : ''}
+		<span>${Math.round(s.wear * 100)}%</span></div>`).join('');
+	$('ivStage').innerHTML = `<div class="iv-glow"></div>${big ? `<img class="iv-skin" src="${esc(big)}" alt="">` : ''}
+		${w.stickers.length ? `<div class="iv-side">${stk}</div>` : ''}
+		${w.nameTag ? `<div class="iv-tag">“${esc(w.nameTag)}”</div>` : ''}`;
+	const ext = w.float != null ? (EXT_NAMES.find(([m]) => w.float < m) || [0, ''])[1] : '';
+	const badges = [w.kills != null ? `<span class="iv-badge st">StatTrak™ · ${fmt(w.kills)}</span>` : '', w.souvenir ? '<span class="iv-badge sv">Souvenir</span>' : '',
+		w.rarity ? `<span class="iv-badge" style="--bc:${color}">${esc(RARITY_NAMES[w.rarity] || '')}</span>` : ''].join('');
+	const mkt = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(w.name)}`;
+	$('ivInfo').innerHTML = `<div class="iv-name">${esc(w.name)}</div><div class="iv-badges">${badges}</div>
+		${w.float != null ? `<div class="iv-block"><div class="iv-row"><span>${esc(t('iv_wear'))}</span><b>${esc(ext)}</b></div>
+			<div class="iv-row"><span>Float</span><b class="mono">${Number(w.float).toFixed(10)}</b></div>${floatBar(w.float)}</div>` : ''}
+		${w.seed != null ? `<div class="iv-block"><div class="iv-row"><span>${esc(t('iv_seed'))}</span><b class="mono">${w.seed}</b></div></div>` : ''}
+		<div class="iv-block"><div class="iv-sub">${esc(t('iv_stickers'))} · ${w.stickers.length}/5</div>
+			${w.stickers.length ? w.stickers.map(s => `<div class="iv-srow">${s.image ? `<img src="${esc(s.image)}" alt="">` : '<span></span>'}<div class="grow"><div>${esc(s.name.replace(/^Sticker \| /, ''))}</div>
+				<div class="iv-sw"><i style="width:${Math.max(2, (1 - s.wear) * 100)}%"></i></div></div><b>${Math.round(s.wear * 100)}%</b></div>`).join('') : `<div class="muted small">${esc(t('iv_no_stickers'))}</div>`}</div>
+		<div class="iv-actions">
+			${w.inspect ? `<button class="btn primary" data-iv-insp="${esc(w.inspect)}">${esc(t('craft_inspect'))}</button>` : ''}
+			${w.invLink ? `<button class="btn ghost" data-iv-open="${esc(w.invLink)}">${esc(t('st_in_inventory'))}</button>` : ''}
+			<button class="btn ghost" data-iv-open="${esc(mkt)}">${esc(t('m_open_market'))} ↗</button>
+		</div>`;
+	$('ivModal').classList.remove('hidden');
+}
+$('ivClose').addEventListener('click', () => $('ivModal').classList.add('hidden'));
+$('ivInfo').addEventListener('click', e => {
+	const a = e.target.closest('[data-iv-insp]'); if (a) launchInspect(a.dataset.ivInsp);
+	const o = e.target.closest('[data-iv-open]'); if (o) openExt(o.dataset.ivOpen);
+});
 
 async function stickerAct(url, body, msg) {
 	if (ui.stkBusy) return;
@@ -1981,16 +3140,13 @@ async function stickerAct(url, body, msg) {
 async function stickerApply(weaponId, slot) {
 	const sel = ui.stk.stickers.find(s => s.stickerId === ui.stkSel); if (!sel) return;
 	const w = ui.stk.weapons.find(x => x.id === weaponId);
-	if (ui.settings.stickerConfirm !== false) {
-		const img = src => src ? `<img src="${esc(src)}" alt="">` : '';
-		const r = await miniConfirm({
-			title: t('st_apply_title'), text: t('st_apply_confirm', { name: sel.name, weapon: w ? w.name : '' }),
-			extra: sel.image || (w && w.image) ? `<div class="mini-preview">${img(sel.image)}<span class="arrow">→</span>${img(w && w.image)}</div>` : '',
-			ok: t('st_put'), dontShow: true,
-		});
-		if (!r.ok) return;
-		if (r.dont) saveSetting({ stickerConfirm: false });
-	}
+	const img = src => src ? `<img src="${esc(src)}" alt="">` : '';
+	const r = await askConfirm('sticker', {
+		title: t('st_apply_title'), text: t('st_apply_confirm', { name: sel.name, weapon: w ? w.name : '' }),
+		extra: sel.image || (w && w.image) ? `<div class="mini-preview">${img(sel.image)}<span class="arrow">→</span>${img(w && w.image)}</div>` : '',
+		ok: t('st_put'),
+	});
+	if (!r.ok) return;
 	await stickerAct('/api/stickers/apply', { weaponId, stickerItemId: sel.ids[0], slot }, t('st_applied'));
 }
 
@@ -2000,7 +3156,7 @@ async function stickerScrape(weaponId, slot) {
 	const s = w && w.stickers.find(x => x.slot === slot);
 	const name = s ? s.name.replace(/^Sticker \| /, '') : '';
 	const wear = s ? Math.round(s.wear * 100) : 0;
-	const r = await miniConfirm({ warn: true, title: t('st_scrape_title'),
+	const r = await askConfirm('scrape', { warn: true, title: t('st_scrape_title'),
 		text: s && s.wear >= 0.999 ? t('st_scrape_last', { name }) : t('st_scrape_confirm', { name, wear }),
 		extra: s && s.image ? `<div class="mini-preview"><img src="${esc(s.image)}" alt=""></div>` : '', ok: t('st_scrape') });
 	if (r.ok) await stickerAct('/api/stickers/scrape', { weaponId, slot }, t('st_scraped'));
@@ -2016,8 +3172,9 @@ $('stSearch').addEventListener('input', renderStickers);
 $('stStickers').addEventListener('click', e => { const s = e.target.closest('[data-stk]'); if (s) { const id = Number(s.dataset.stk); ui.stkSel = ui.stkSel === id ? null : id; renderStickers(); } });
 $('stWeapons').addEventListener('click', e => {
 	const d = e.target.dataset;
-	if (d.inspGame) openExt(d.inspGame);
-	if (d.inspCopy) copyText(d.inspCopy);
+	const v = e.target.closest('[data-view]');
+	if (v) { openItemView(ui.stk.weapons.find(x => x.id === v.dataset.view)); return; }
+	if (d.inspGame) launchInspect(d.inspGame);
 	if (d.openInv) openExt(d.openInv);
 	if (d.put) stickerApply(d.put, Number(d.slot));
 	if (d.scrape) stickerScrape(d.scrape, Number(d.slot));
@@ -2057,7 +3214,7 @@ function renderArmory() {
 async function armRedeem(rid) {
 	const i = ui.armory.items.find(x => x.redeemId === rid); if (!i) return;
 	const q = ui.armQty[rid] || 1;
-	if (!(await miniConfirm({ title: 'Armory', text: t('arm_confirm', { name: i.name, n: q, cost: i.points * q }) })).ok) return;
+	if (!(await askConfirm('armory', { title: 'Armory', text: t('arm_confirm', { name: i.name, n: q, cost: i.points * q }) })).ok) return;
 	document.querySelectorAll('[data-redeem]').forEach(b => { b.disabled = true; });
 	try {
 		const r = await apiPost('/api/armory/redeem', { redeemId: rid, count: q });
@@ -2156,21 +3313,8 @@ applyStaticI18n();
 
 if (window.desktop) {
 	window.desktop.version().then(v => { $('versionText').textContent = t('version', { v }); });
-	if (window.desktop.onUpdate) window.desktop.onUpdate(u => {
-		const el = document.createElement('div');
-		el.className = 'toast good nudge';
-		el.innerHTML = `<div>${esc(t(u.ready ? 'update_ready' : 'update_available', { v: u.version }))}</div>
-			<div class="nudge-row"><button class="btn primary small" data-u="go">${esc(t(u.ready ? 'update_restart' : 'update_download'))}</button>
-			<button class="heart-mini" data-u="heart" title="${esc(t('support_title'))}"><svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2Z" fill="currentColor"/></svg></button>
-			<button class="nudge-x" data-u="x">×</button></div>`;
-		el.addEventListener('click', e => {
-			const k = e.target.closest('[data-u]'); if (!k) return;
-			if (k.dataset.u === 'go') u.ready ? window.desktop.installUpdate() : openExt(u.url);
-			if (k.dataset.u === 'heart') openSupport();
-			if (k.dataset.u === 'x') el.remove();
-		});
-		$('toasts').appendChild(el);
-	});
+	if (window.desktop.version) window.desktop.version().then(v => { ui.appVersion = v; }).catch(() => {});
+	if (window.desktop.onUpdate) window.desktop.onUpdate(onUpdateEvent);
 }
 setMode('qr');
 try {
@@ -2180,3 +3324,31 @@ try {
 } catch (e) { /* ignore */ }
 loadSettings();
 poll(true);
+
+// Клик по затемнённому фону закрывает любое окно — так же, как его кнопка «Отмена» / «Закрыть».
+// Окно оформления покупки во время оплаты не закрывается.
+const BACKDROP_CLOSE = {
+	miniModal: () => ui.miniAnswer && ui.miniAnswer(false),
+	qtyModal: () => $('qtyCancel').click(),
+	tdModal: () => closeTransferDone(),
+	craftModal: () => $('craftOk').click(),
+	checkoutModal: () => { if (!(ui.co && ui.co.busy)) { if (ui.co && ui.co.answer) ui.co.answer(false); else closeCheckout(); } },
+	guardModal: () => $('guardCancel').click(),
+	rulesModal: () => $('rulesClose').click(),
+	supportModal: () => $('supportClose').click(),
+	welcomeModal: () => $('welcomeStart').click(),
+	updModal: () => $('updLater').click(),
+	pnlModal: () => $('pnlCancel').click(),
+	ivModal: () => $('ivClose').click(),
+	boModal: () => $('boCancel').click(),
+	settingsModal: () => $('settingsModal').classList.add('hidden'),
+};
+let backdropDown = null;
+document.addEventListener('mousedown', e => { backdropDown = e.target.classList && e.target.classList.contains('modal') ? e.target : null; });
+document.addEventListener('mouseup', e => {
+	// только если и нажали, и отпустили на фоне (выделение текста в поле с выходом за окно не закрывает его)
+	const m = backdropDown; backdropDown = null;
+	if (!m || e.target !== m || m.classList.contains('hidden')) return;
+	const fn = BACKDROP_CLOSE[m.id];
+	if (fn) fn(); else m.classList.add('hidden');
+});

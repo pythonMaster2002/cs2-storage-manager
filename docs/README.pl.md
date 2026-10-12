@@ -38,15 +38,20 @@ Bez subskrypcji i zewnętrznych serwerów: wszystko działa na twoim komputerze 
 - **Reguły przenoszenia**: „wszystkie skrzynie → Cases 01, Cases 02…”, „naklejki → Stickers”. Jednym kliknięciem albo zaraz po zalogowaniu.
 - Zmiana nazw pojemników, ukrywanie pełnych, eksport wszystkiego do JSON/CSV.
 
+**Ceny i portfel**
+- Ile są warte ekwipunek i skrzynie — według 7-dniowej średniej Steam, Buff163 lub Skinport, w Twojej walucie; dzienny wykres wartości oraz największe wzrosty i spadki.
+- **Portfel (P&L)**: import historii Rynku Steam, zakupy ręcznie lub z CSV — średnia cena zakupu, niezrealizowany i zrealizowany zysk (FIFO).
+- Ceny pochodzą z publicznych cenników pobieranych co 12 godzin; Twój ekwipunek nigdzie nie jest wysyłany.
+
 **Kontrakty wymiany**
 - Kontrakty z ekwipunku *i* z pojemników (przedmioty wyjmowane są automatycznie).
-- Wszystkie możliwe wyniki z **szansą**, float każdego wejścia i **przewidywany float** wyniku na pasku zużycia.
+- Każdy możliwy wynik z **szansą**, float każdego wejścia, **przewidywany float** wyniku i **wartość oczekiwana** w porównaniu z kosztem wejść.
 - Przedmioty, których gra nie przyjmie (najwyższa jakość w kolekcji), są oznaczane z góry. Pamiątki (souvenir) są obsługiwane.
-- Po kontrakcie: **Obejrzyj w grze** i **Na Rynku Społeczności**.
+- Po kontrakcie: **zysk lub strata**, szczegółowy podgląd przedmiotu, **Obejrzyj w grze** i **Rynek Społeczności**.
 
 **Naklejki**
 - Naklejanie, zdrapywanie i usuwanie naklejek — także z dowolnym umieszczeniem w CS2.
-- Float broni z paskiem zużycia, zużycie naklejek, linki podglądu i link do przedmiotu w ekwipunku Steam.
+- Podgląd przedmiotu jak w grze: float do 10 miejsc, seed wzoru, licznik StatTrak™, plakietka z nazwą i zużycie naklejek; linki do obejrzenia i do przedmiotu w ekwipunku Steam.
 
 **Sklep CS2 i Armory**
 - Koszyk, ulubione, saldo portfela i saldo po zakupie. Każdą płatność potwierdzasz sam.
@@ -55,24 +60,29 @@ Bez subskrypcji i zewnętrznych serwerów: wszystko działa na twoim komputerze 
 
 **Wymiany, Rynek i Steam Guard**
 - Oferty przychodzące i wychodzące, akceptuj/odrzuć, automatyczne przyjmowanie prezentów.
-- Oferty sprzedaży, zlecenia kupna, historia z wyszukiwaniem, sprzedaż z wyliczoną prowizją.
+- Rynek: oferty, **zlecenia kupna z arkuszem zleceń na żywo i 30-dniowym wykresem ceny**, historia z wyszukiwaniem, sprzedaż z wyliczoną prowizją (także prosto ze skrzyń). Waluty bez groszy (UAH, KZT, JPY…) są uwzględniane automatycznie.
 - Wbudowany mini-**SDA**: kody Steam Guard dla wszystkich kont z maFile, potwierdzenia wymian i ofert, kontrola proxy.
 
 **Konta i prywatność**
-- Kilka kont jednocześnie, każde z własnym proxy SOCKS5/HTTP.
+- Kilka kont naraz, każde z własnym proxy SOCKS5/HTTP — ustawianie i sprawdzanie w Ustawieniach lub wklejenie całej listy. Przypinanie i zmiana kolejności kont.
 - Logowanie **kodem QR** (pojawia się od razu), loginem i hasłem albo przez **maFile**.
-- 10 języków, automatyczne aktualizacje (wersja z instalatorem).
+- **Tryb streamera** (Ctrl+Shift+H): loginy i nicki zmieniają się na „Konto 1, 2…”, saldo jest ukryte, a kody Steam Guard, partnerzy wymian i proxy są rozmyte — bezpiecznie do nagrań i zrzutów ekranu.
+- 10 języków. Aktualizacje tylko za Twoją zgodą — albo całkowicie wyłączone.
 
 ## Zrzuty ekranu
 
 | | |
 |---|---|
+| <img src="screenshots/overview.png" alt="overview"> | <img src="screenshots/portfolio.png" alt="portfolio"> |
+| **Przegląd**: wartość, wykres, najcenniejsze przedmioty | **Portfel**: zyski i straty (FIFO) |
 | <img src="screenshots/tradeup.png" alt="trade-up"> | <img src="screenshots/craft.png" alt="result"> |
-| **Kontrakt**: wyniki, szanse, floaty | **Wynik**: obejrzyj w grze lub otwórz na rynku |
+| **Kontrakt**: wyniki, szanse, wartość oczekiwana | **Wynik**: zysk lub strata, podgląd, obejrzyj, rynek |
+| <img src="screenshots/item.png" alt="item"> | <img src="screenshots/market.png" alt="buy order"> |
+| **Przedmiot**: float, wzór, naklejki | **Zlecenie kupna**: arkusz zleceń i wykres ceny |
 | <img src="screenshots/stickers.png" alt="stickers"> | <img src="screenshots/store.png" alt="store"> |
 | **Naklejki**: naklej, zdrap, usuń | **Sklep CS2**: koszyk i portfel |
-| <img src="screenshots/overview.png" alt="overview"> | <img src="screenshots/guard.png" alt="Steam Guard"> |
-| **Przegląd** jednego lub wszystkich kont | **Steam Guard**: kody i potwierdzenia |
+| <img src="screenshots/caskets.png" alt="storage units"> | <img src="screenshots/guard.png" alt="Steam Guard"> |
+| **Skrzynie**: masowe przenoszenie | **Steam Guard**: kody i potwierdzenia |
 
 ## Pobierz
 
@@ -91,7 +101,7 @@ Najnowsza wersja jest na stronie **[Releases](https://github.com/pythonMaster200
 - **macOS** („aplikacja jest uszkodzona” / „nie można zweryfikować”): prawy klik na aplikację → **Otwórz** albo w Terminalu `xattr -cr "/Applications/Caskit.app"`.
 - **Linux AppImage**: `chmod +x Caskit-*.AppImage`, potem uruchom.
 
-**Skan VirusTotal** (v1.0.0): [instalator — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22), [portable — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9).
+**VirusTotal**: każde wydanie jest skanowane automatycznie — wyniki i linki są na dole każdej [strony wydania](https://github.com/pythonMaster2002/cs2-storage-manager/releases).
 
 ### Odinstalowanie
 
@@ -115,6 +125,10 @@ Zapisane logowania i ustawienia zostają w folderze danych (zobacz FAQ) — usu�
 
 **Czy mogę grać, gdy Caskit jest otwarty?** Jeśli uruchomisz CS2 na tym samym koncie, Steam zostawi tylko jedną z dwóch sesji. Najpierw wyloguj to konto w Caskit.
 
+**Czy automatyczne aktualizacje są bezpieczne? Czy aktualizacja może mnie oszukać?** Caskit nic nie pobiera ani nie instaluje sam. Gdy wychodzi nowa wersja, najpierw pyta — *Aktualizuj*, *Pomiń tę wersję* lub *Nie teraz* — a w Ustawienia → Ogólne → Aktualizacje możesz wybrać *Nie sprawdzaj*, żeby nawet nie sprawdzał. Aktualizacje pochodzą tylko z [Releases](https://github.com/pythonMaster2002/cs2-storage-manager/releases) tego repozytorium: buduje je GitHub Actions z otwartego kodu ([workflow](../.github/workflows/release.yml)), są skanowane na VirusTotal, a instalator sprawdza SHA-512 każdego pliku przed instalacją. Wersja portable nigdy nie aktualizuje się sama. Jeśli nie chcesz ufać żadnym gotowym plikom — zbuduj Caskit sam (niżej).
+
+**Czy mogę zbudować go sam?** Tak — wszystko jest w tym repozytorium, zobacz «Budowanie ze źródeł» niżej. Skrypty `:noupdate` tworzą wersję bez aktualizacji: nawet nie pyta GitHuba o nowe wersje.
+
 **Gdzie są moje dane?** Tylko na twoim komputerze: `%APPDATA%\Caskit` (Windows), `~/Library/Application Support/Caskit` (macOS), `~/.config/Caskit` (Linux).
 
 ## Wesprzyj projekt
@@ -128,17 +142,24 @@ Caskit jest darmowy i taki zostanie. Jeśli oszczędza ci czas:
 
 ## Budowanie ze źródeł
 
-Wymaga Node.js 22+.
+Wymaga Node.js 22+ i Git.
 
 ```bash
+git clone https://github.com/pythonMaster2002/cs2-storage-manager
+cd cs2-storage-manager
 npm ci
-npm start              # uruchom
-npm run build:win      # instalator + portable → dist/
-npm run build:linux    # AppImage + deb
-npm run build:mac      # dmg + zip (tylko na macOS)
+npm start                      # uruchom
+npm run build:win              # instalator + portable → dist/
+npm run build:linux            # AppImage + deb
+npm run build:mac              # dmg + zip (tylko na macOS)
+
+# to samo bez aktualizacji: bez sprawdzania, nic się nie pobiera
+npm run build:win:noupdate
+npm run build:linux:noupdate
+npm run build:mac:noupdate
 ```
 
-**Wydanie**: podnieś `version` w `package.json`, potem `git tag vX.Y.Z && git push --tags`. GitHub Actions zbuduje wszystkie trzy systemy i opublikuje je w Releases; zainstalowane kopie zaktualizują się same.
+**Wydanie**: podnieś `version` w `package.json`, potem `git tag vX.Y.Z && git push --tags`. GitHub Actions zbuduje wszystkie trzy systemy, opublikuje je w Releases i przeskanuje pliki `.exe` na VirusTotal (sekret `VT_API_KEY`); zainstalowane kopie zaproponują aktualizację.
 
 ## Zasady podpisywania kodu
 

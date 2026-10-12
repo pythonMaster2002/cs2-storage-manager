@@ -300,9 +300,19 @@ function storeMeta() {
 	if (!_meta) {
 		// кэш от старой версии сборки не берём — встроенная копия свежее, а кэш пересоберётся в фоне
 		const cached = cacheDir() ? readJson(path.join(cacheDir(), META_FILE)) : null;
-		_meta = cached && cached.v === META_VERSION ? cached : readJson(path.join(BUNDLED, META_FILE)) || {};
+		_meta = localImages(cached && cached.v === META_VERSION ? cached : readJson(path.join(BUNDLED, META_FILE)) || {});
 	}
 	return _meta;
+}
+
+// Картинки из зеркала на raw.githubusercontent.com приходят как text/plain (+ nosniff), и окно приложения их
+// не показывает (особенно SVG). Отдаём их через локальный сервер (/img) с правильным типом и кэшем на диске.
+const RAW_IMG = 'https://raw.githubusercontent.com/ByMykel/counter-strike-image-tracker/';
+const localImg = u => (typeof u === 'string' && u.startsWith(RAW_IMG) ? `/img?u=${encodeURIComponent(u)}` : u);
+function localImages(meta) {
+	for (const d of Object.values(meta.defs || {})) if (d && d.image) d.image = localImg(d.image);
+	for (const i of (meta.armory && meta.armory.items) || []) if (i.image) i.image = localImg(i.image);
+	return meta;
 }
 function readJson(file) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { return null; } }
 
@@ -321,7 +331,7 @@ async function refreshStoreMeta(force = false) {
 	fs.mkdirSync(dir, { recursive: true });
 	fs.writeFileSync(file + '.tmp', JSON.stringify(meta));
 	fs.renameSync(file + '.tmp', file);
-	_meta = meta;
+	_meta = localImages(meta);
 	return { updated: true };
 }
 
@@ -336,4 +346,4 @@ function loadSupport() {
 	return out;
 }
 
-module.exports = { loadSupport, loadMap, refresh, BUNDLED, FILES, storeMeta, refreshStoreMeta, buildStoreMeta, META_SOURCES, META_VERSION, stickerIcon };
+module.exports = { RAW_IMG, loadSupport, loadMap, refresh, BUNDLED, FILES, storeMeta, refreshStoreMeta, buildStoreMeta, META_SOURCES, META_VERSION, stickerIcon };

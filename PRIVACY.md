@@ -9,6 +9,7 @@ Caskit is a desktop application that runs entirely on your computer. It has **no
 - Secrets are encrypted with the operating system's facilities (Windows DPAPI, macOS Keychain, libsecret on Linux).
 - Your Steam password is never stored.
 - Exports (JSON/CSV) are written to `Documents/Caskit` only when you press **Export**.
+- The portfolio history (one value snapshot per account per day, used for the value chart) is stored in `portfolio.json` in the same data folder.
 
 ## Network connections
 
@@ -20,9 +21,10 @@ Caskit connects only to the following services:
 | While the app shows items | Steam's image CDNs (`community.akamai.steamstatic.com`, `cdn.steamstatic.com`) | item, sticker and store icons |
 | Every 3 minutes, for saved accounts that have a proxy | `api.steampowered.com`, **through that proxy** | checking that the proxy still works |
 | At start-up | GitHub (`github.com`, `api.github.com`) | checking for a new version of Caskit |
+| Every 12 hours, if prices are on (Settings → Prices and value) | the selected price source: `prices.csgotrader.app` (Steam and Buff163 prices, exchange rates) or `api.skinport.com` | public price lists for the value of your items; your inventory is not sent |
 | Once a day | `raw.githubusercontent.com` (this repository, [GameTracking-CS2](https://github.com/SteamDatabase/GameTracking-CS2), [counter-strike-image-tracker](https://github.com/ByMykel/counter-strike-image-tracker)) | item names and icons, the store catalog and the list of donation options |
 
-- No account data, identifiers or usage statistics are sent to GitHub or anyone else; these requests download public files only.
+- No account data, identifiers or usage statistics are sent to GitHub, the price sources or anyone else; these requests download public files only.
 - If an account has a proxy, all of that account's traffic (including the QR code, web requests and avatar) goes through the proxy.
 - Links such as Ko-fi, GitHub or the Steam Community Market open in your browser only when you click them.
 

@@ -38,15 +38,20 @@
 - **转移规则**：「所有箱子 → Cases 01、Cases 02…」、「印花 → Stickers」。一键执行或登录后自动执行。
 - 重命名储物柜、隐藏已满的储物柜，并将全部内容导出为 JSON/CSV。
 
+**价格与投资组合**
+- 库存和储物柜值多少钱——按 Steam 7 日均价、Buff163 或 Skinport 价格，以你的货币显示；每日价值曲线以及涨跌最多的物品。
+- **投资组合（盈亏）**：导入 Steam 市场记录，手动或通过 CSV 添加购买记录——平均买入价、未实现和已实现盈利（先进先出）。
+- 价格来自每 12 小时下载一次的公开价格表；你的库存不会发送到任何地方。
+
 **汰换合同**
 - 可使用库存*和*储物柜中的物品（会自动取出）。
-- 显示所有可能结果及其**概率**、每件输入物品的磨损值，以及结果的**预计磨损值**（磨损条显示）。
+- 每种可能结果的**概率**、每件输入的磨损值、结果的**预测磨损值**，以及与输入成本对比的**期望价值**。
 - 游戏不接受的物品（所属收藏品的最高品质）会提前标出。支持纪念品。
-- 合同完成后：**在游戏中检视**和**在社区市场查看**。
+- 汰换后：合同的**盈利或亏损**、物品详情、**在游戏中检视**和**社区市场**。
 
 **印花**
 - 贴上、刮擦和移除印花——包括 CS2 自由放置的印花。
-- 武器磨损值与磨损条、印花磨损、检视链接，以及 Steam 库存中该物品的链接。
+- 像游戏中一样的物品详情：10 位磨损值、图案种子、StatTrak™ 计数、名称标签和印花磨损；检视链接以及 Steam 库存中该物品的链接。
 
 **CS2 商店与军械库**
 - 购物车、收藏、钱包余额和购买后余额。每笔付款都由你确认。
@@ -55,24 +60,29 @@
 
 **交易、社区市场与 Steam 令牌**
 - 收到和发出的交易报价，接受/拒绝，自动接受礼物。
-- 在售物品、求购订单、可搜索的历史记录、自动计算手续费的出售。
+- 市场：在售、**带实时挂单簿和 30 日价格图的求购订单**、可搜索的历史记录、自动计算手续费的出售（也可直接从储物柜出售）。没有小数单位的货币（UAH、KZT、JPY……）会自动处理。
 - 内置迷你 **SDA**：所有带 maFile 的账户的 Steam 令牌验证码、交易和上架确认、代理监控。
 
 **账户与隐私**
-- 同时登录多个账户，每个账户可使用自己的 SOCKS5/HTTP 代理。
+- 同时登录多个账户，每个账户使用独立的 SOCKS5/HTTP 代理——在设置中配置和检测，或直接粘贴整个列表。账户可置顶并排序。
 - 使用**二维码**（立即显示）、用户名和密码或 **maFile** 登录。
-- 10 种界面语言，自动更新（安装版）。
+- **主播模式**（Ctrl+Shift+H）：登录名和昵称显示为“账户 1、2……”，隐藏余额，Steam 令牌验证码、交易对象和代理会被模糊——录视频、截图都安全。
+- 10 种界面语言。更新仅在你同意后进行——也可以完全关闭。
 
 ## 截图
 
 | | |
 |---|---|
+| <img src="screenshots/overview.png" alt="overview"> | <img src="screenshots/portfolio.png" alt="portfolio"> |
+| **概览**：价值、曲线、最值钱的物品 | **投资组合**：盈亏（先进先出） |
 | <img src="screenshots/tradeup.png" alt="trade-up"> | <img src="screenshots/craft.png" alt="result"> |
-| **汰换合同**：结果、概率、磨损 | **结果**：在游戏中检视或在市场中打开 |
+| **汰换合同**：结果、概率、期望价值 | **结果**：盈亏、查看、检视、市场 |
+| <img src="screenshots/item.png" alt="item"> | <img src="screenshots/market.png" alt="buy order"> |
+| **物品**：磨损、图案、印花 | **求购订单**：挂单簿和价格图 |
 | <img src="screenshots/stickers.png" alt="stickers"> | <img src="screenshots/store.png" alt="store"> |
 | **印花**：贴上、刮擦、移除 | **CS2 商店**：购物车与钱包 |
-| <img src="screenshots/overview.png" alt="overview"> | <img src="screenshots/guard.png" alt="Steam Guard"> |
-| 单个或全部账户的**概览** | **Steam 令牌**：验证码与确认 |
+| <img src="screenshots/caskets.png" alt="storage units"> | <img src="screenshots/guard.png" alt="Steam Guard"> |
+| **储物柜**：批量转移 | **Steam 令牌**：验证码与确认 |
 
 ## 下载
 
@@ -91,7 +101,7 @@
 - **macOS**（「应用已损坏」/「无法验证」）：右键点击应用 → **打开**，或在终端执行 `xattr -cr "/Applications/Caskit.app"`。
 - **Linux AppImage**：`chmod +x Caskit-*.AppImage`，然后运行。
 
-**VirusTotal 扫描**（v1.0.0）：[安装版 — 0/67](https://www.virustotal.com/gui/file/9c1ad7cc654280aafbcb21ae29a42f52e18aa85704d05feb731fcd82c8ed8f22)，[便携版 — 0/66](https://www.virustotal.com/gui/file/26894b8fbed549bd5108a604686b22c1a3416b089f870b442b207eac8c2d57f9)。
+**VirusTotal**：每个版本都会自动扫描——结果和链接位于每个[发布页面](https://github.com/pythonMaster2002/cs2-storage-manager/releases)底部。
 
 ### 卸载
 
@@ -115,6 +125,10 @@
 
 **Caskit 打开时可以玩游戏吗？** 如果在同一账户上启动 CS2，Steam 只会保留两个会话中的一个。请先在 Caskit 中退出该账户。
 
+**自动更新安全吗？更新会不会坑我？** Caskit 从不自行下载或安装任何东西。有新版本时会先询问你——“更新”、“跳过此版本”或“以后再说”——在 设置 → 常规 → 更新 中选择“不检查”，就连检查也不会进行。更新只来自本仓库的 [Releases](https://github.com/pythonMaster2002/cs2-storage-manager/releases)：由 GitHub Actions 从公开代码构建（[workflow](../.github/workflows/release.yml)），经过 VirusTotal 扫描，安装程序在安装前会校验每个文件的 SHA-512。便携版永远不会自行更新。如果你不想信任任何现成的文件——可以自己构建 Caskit（见下文）。
+
+**可以自己构建吗？** 可以——所需的一切都在本仓库中，见下方“从源码构建”。`:noupdate` 脚本会构建不含更新功能的版本：它甚至不会向 GitHub 查询新版本。
+
 **数据保存在哪里？** 只在你的电脑上：`%APPDATA%\Caskit`（Windows）、`~/Library/Application Support/Caskit`（macOS）、`~/.config/Caskit`（Linux）。
 
 ## 支持项目
@@ -128,17 +142,24 @@ Caskit 永久免费。如果它为你节省了时间：
 
 ## 从源码构建
 
-需要 Node.js 22+。
+需要 Node.js 22+ 和 Git。
 
 ```bash
+git clone https://github.com/pythonMaster2002/cs2-storage-manager
+cd cs2-storage-manager
 npm ci
-npm start              # 运行
-npm run build:win      # 安装包 + 便携版 → dist/
-npm run build:linux    # AppImage + deb
-npm run build:mac      # dmg + zip（仅限 macOS）
+npm start                      # 运行
+npm run build:win              # 安装包 + 便携版 → dist/
+npm run build:linux            # AppImage + deb
+npm run build:mac              # dmg + zip（仅限 macOS）
+
+# 同上但不含更新：不检查、不下载
+npm run build:win:noupdate
+npm run build:linux:noupdate
+npm run build:mac:noupdate
 ```
 
-**发布**：在 `package.json` 中提升 `version`，然后执行 `git tag vX.Y.Z && git push --tags`。GitHub Actions 会构建三个系统的版本并发布到 Releases；已安装的副本会自动更新。
+**发布**：提高 `package.json` 中的 `version`，然后执行 `git tag vX.Y.Z && git push --tags`。GitHub Actions 会构建三个系统、发布到 Releases 并在 VirusTotal 上扫描 `.exe` 文件（密钥 `VT_API_KEY`）；已安装的副本会提示更新。
 
 ## 代码签名政策
 
