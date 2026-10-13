@@ -1770,6 +1770,28 @@ async function loadPnl() {
 	} catch (e) { $('pnlTiles').innerHTML = `<p class="muted small">${esc(e.message)}</p>`; }
 }
 
+// Сортировка позиций по клику на заголовок: второй клик — обратный порядок. Пустые значения («—») всегда внизу.
+ui.pnlSort = (() => { try { return JSON.parse(localStorage.getItem('pnlSort')) || { key: 'value', dir: -1 }; } catch (e) { return { key: 'value', dir: -1 }; } })();
+const PSORT = {
+	name: p => p.name, covered: p => p.covered, avg: p => p.avg, unit: p => p.unit,
+	value: p => (p.covered ? p.value : null), pnl: p => p.pnl, realized: p => (p.sold ? p.realized : null),
+};
+function sortPositions(list) {
+	const { key, dir } = ui.pnlSort, get = PSORT[key] || PSORT.value;
+	return list.slice().sort((a, b) => {
+		const x = get(a), y = get(b);
+		if (x == null || y == null) return (x == null) - (y == null);
+		return (typeof x === 'string' ? x.localeCompare(y) : x - y) * dir;
+	});
+}
+$('pnlTable').addEventListener('click', e => {
+	const h = e.target.closest('[data-psort]'); if (!h) return;
+	const key = h.dataset.psort;
+	ui.pnlSort = ui.pnlSort.key === key ? { key, dir: -ui.pnlSort.dir } : { key, dir: key === 'name' ? 1 : -1 };
+	try { localStorage.setItem('pnlSort', JSON.stringify(ui.pnlSort)); } catch (err) { /* нет хранилища */ }
+	renderPnl();
+});
+
 function renderPnl() {
 	const r = ui.pnl;
 	if (!r) return;
@@ -1788,9 +1810,13 @@ function renderPnl() {
 		ovTile(t('pnl_uncovered'), fmt(r.uncoveredQty), esc(r.uncoveredValue ? t('pnl_uncovered_sub', { v: cur(r.uncoveredValue, c) }) : t('pnl_uncovered_sub0'))),
 	].join('');
 	const q = ($('pnlSearch').value || '').toLowerCase();
-	const rows = r.positions.filter(p => !q || p.name.toLowerCase().includes(q));
-	$('pnlTable').innerHTML = `<thead><tr><th>${esc(t('pnl_item_col'))}</th><th class="num">${esc(t('pnl_qty'))}</th><th class="num">${esc(t('pnl_avg'))}</th>
-		<th class="num">${esc(t('pnl_now'))}</th><th class="num">${esc(t('pnl_value'))}</th><th class="num">${esc(t('pnl_unrealized'))}</th><th class="num">${esc(t('pnl_realized'))}</th></tr></thead>
+	const rows = sortPositions(r.positions.filter(p => !q || p.name.toLowerCase().includes(q)));
+	const th = (key, label, num = true) => {
+		const on = ui.pnlSort.key === key;
+		return `<th class="${num ? 'num ' : ''}sortable ${on ? 'on' : ''}" data-psort="${key}" title="${esc(t('sort_by'))}">${esc(label)}<i class="sort-ar">${on ? (ui.pnlSort.dir > 0 ? '▲' : '▼') : '↕'}</i></th>`;
+	};
+	$('pnlTable').innerHTML = `<thead><tr>${th('name', t('pnl_item_col'), false)}${th('covered', t('pnl_qty'))}${th('avg', t('pnl_avg'))}
+		${th('unit', t('pnl_now'))}${th('value', t('pnl_value'))}${th('pnl', t('pnl_unrealized'))}${th('realized', t('pnl_realized'))}</tr></thead>
 		<tbody>${rows.map(p => `<tr>
 			<td><div class="it">${p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy">` : '<span class="pnl-noimg"></span>'}<div><div>${esc(p.name)}</div>
 				<div class="sub">${esc(t('pnl_bought_sold', { b: fmt(p.bought), s: fmt(p.sold) }))}</div></div></div></td>
@@ -1969,8 +1995,11 @@ $('pnlCsvFile').addEventListener('change', async e => {
 	if (!f) return;
 	try {
 		const text = await f.text();
-		const r = await apiPost('/api/pnl/csv', { text, currency: (ui.pnl && ui.pnl.currency) || 'USD' });
-		toast(t('pnl_csv_done', { n: fmt(r.added) }) + (r.errors.length ? ' · ' + t('pnl_csv_errors', { rows: r.errors.join(', ') }) : ''), r.added ? 'good' : 'bad');
+		// валюта кошелька — для выгрузки SIH, где у части цен символ неоднозначен (¥, kr)
+		const walletCurrency = ui.state && ui.state.wallet && ui.state.wallet.currency;
+		const r = await apiPost('/api/pnl/csv', { text, currency: (ui.pnl && ui.pnl.currency) || 'USD', walletCurrency });
+		toast(t(r.format === 'sih' ? 'pnl_sih_done' : 'pnl_csv_done', { n: fmt(r.added) }) + (r.duplicates ? ' · ' + t('pnl_csv_dupes', { n: fmt(r.duplicates) }) : '')
+			+ (r.errors.length ? ' · ' + t('pnl_csv_errors', { rows: r.errors.join(', ') }) : ''), r.added || r.duplicates ? 'good' : 'bad');
 		loadPnl();
 	} catch (err) { toast(err.message, 'bad'); }
 });

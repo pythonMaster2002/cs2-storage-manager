@@ -172,27 +172,41 @@ async function importMarketHistory(session, ledger, { onProgress = () => {}, sho
 	const curOf = id => SteamUser.ECurrencyCode[Number(id) > 2000 ? Number(id) - 2000 : Number(id)] || null;
 	const me = typeof session.sid64 === 'function' ? session.sid64() : session.user.steamID.getSteamID64();
 	const prev = ledger.importInfo(session.login);
-	const PAGE = 100;  // большими страницами Steam быстрее упирается в лимит
+	// Страницы по 500 (как у SIH): Steam отдаёт столько за раз, а лимит считает запросы, а не события —
+	// по 100 импорт в ~1000+ сделок упирался в 429 и подолгу ждал («застревал»).
+	const PAGE = 500;
 	const sleep = ms => new Promise(r => setTimeout(r, ms));
 	let start = 0, total = null, pages = 0, reachedOld = false, found = 0, added = 0, newest = prev && prev.lastTs || 0;
+	// Темп как в TCP: пауза между страницами сама уменьшается, пока Steam отвечает (до 0.3 с),
+	// а на 429 — резко растёт; так импорт идёт с максимальной скоростью, которую Steam сейчас пропускает.
+	let gap = 1000;
 	while (pages < maxPages && (total == null || start < total) && !reachedOld) {
 		if (shouldStop()) break;
-		let res, tries = 0;
-		for (;;) {
-			res = await session.webRequest('GET', `${COMMUNITY}/market/myhistory/render/?query=&start=${start}&count=${PAGE}&norender=1`);
-			if (res.status !== 429 || tries >= 8) break;
-			tries++;
-			// лимит Steam: ждём и продолжаем с той же страницы (минута, потом дольше)
-			const wait = Math.min(300, 60 * tries);
+		// Страница: 429 — ждём (минута, потом дольше); сбой (5xx, success:false, обрыв) — повтор через 5–60 с.
+		// Только после многих неудач подряд — ошибка (загруженное уже сохранено).
+		let d = null, limited = 0, failed = 0, lastErr = '';
+		while (!d && !shouldStop()) {
+			let res = null;
+			try { res = await session.webRequest('GET', `${COMMUNITY}/market/myhistory/render/?query=&start=${start}&count=${PAGE}&norender=1`); }
+			catch (e) { lastErr = e.message; }
+			let wait = 0;
+			if (res && res.status === 429) {
+				if (++limited > 8) throw new Error('Steam ограничил частоту запросов — импорт остановлен, нажмите ещё раз позже: загруженное сохранено');
+				gap = Math.min(15000, gap * 2 + 2000);
+				wait = Math.min(240, 20 * 2 ** (limited - 1));   // 20, 40, 80, 160, 240 с
+			} else if (res && res.status === 200) {
+				let x = null;
+				try { x = JSON.parse(res.body); } catch (e) { lastErr = 'Steam вернул не JSON — войдите в аккаунт заново'; }
+				if (x && x.success) d = x; else if (x) lastErr = 'Steam не отдал историю Торговой площадки';
+			} else if (res) lastErr = `Steam не отдал историю Торговой площадки (HTTP ${res.status})`;
+			if (d) break;
+			if (!wait) {
+				if (++failed > 6) throw new Error(lastErr || 'Steam не отдал историю Торговой площадки');
+				wait = [5, 10, 20, 30, 60, 60][failed - 1];
+			}
 			for (let s = wait; s > 0 && !shouldStop(); s--) { onProgress({ done: start, total, found, waiting: s }); await sleep(1000); }
-			if (shouldStop()) break;
 		}
-		if (shouldStop()) break;
-		if (res.status === 429) throw new Error('Steam ограничил частоту запросов — импорт остановлен, нажмите ещё раз позже: загруженное сохранено');
-		if (res.status !== 200) throw new Error(`Steam не отдал историю Торговой площадки (HTTP ${res.status})`);
-		let d;
-		try { d = JSON.parse(res.body); } catch (e) { throw new Error('Steam вернул не JSON — войдите в аккаунт заново'); }
-		if (!d || !d.success) throw new Error('Steam не отдал историю Торговой площадки');
+		if (shouldStop() || !d) break;
 		total = Number(d.total_count) || 0;
 		const assets = (d.assets && d.assets['730']) || {};
 		const nameOf = a => { const x = a && assets[String(a.contextid)] && assets[String(a.contextid)][String(a.id)]; return x && x.market_hash_name; };
@@ -218,7 +232,8 @@ async function importMarketHistory(session, ledger, { onProgress = () => {}, sho
 		added += ledger.add(out);
 		pages++; start += PAGE;
 		onProgress({ done: Math.min(start, total), total, found, added });
-		if (start < total && !reachedOld) await sleep(2500);
+		if (!limited && !failed) gap = Math.max(300, Math.round(gap * 0.75));
+		if (start < total && !reachedOld) await sleep(gap);
 	}
 	const complete = total != null && (start >= total || reachedOld);
 	ledger.setImportInfo(session.login, { at: Date.now(), lastTs: newest, total, found, complete: Boolean(complete || (prev && prev.complete)) });
@@ -255,4 +270,76 @@ function parseCsv(text, { login, cur: defCur }) {
 	return { rows, errors };
 }
 
-module.exports = { Ledger, importMarketHistory, parseCsv };
+// ---------------------------------------------------------------- CSV из SIH (Steam Inventory Helper → «Экспорт истории ТП»)
+// Колонки: Item Name, Game Name, Listed On, Acted On, Display Price, Price in Cents, Type, Market Name, App Id, …
+// Type: purchase / sale (остальное — выставления и снятия лотов). Цена в копейках валюты кошелька, валюта — по символу
+// в Display Price. Дата — как отформатировал браузер (12.10.2026, 10/12/2026, 2026-10-12…) или «12 Oct» без года.
+const SIH_HEAD = /^﻿?"?Item Name"?,"?Game Name"?,"?Listed On"?,"?Acted On"?,"?Display Price"?,"?Price in Cents"?,"?Type"?/i;
+const isSihCsv = text => SIH_HEAD.test(String(text || '').slice(0, 300));
+// символ валюты Steam -> код (длинные — раньше коротких: «CDN$» прежде «$»)
+const CUR_SYMBOLS = [['CDN$', 'CAD'], ['A$', 'AUD'], ['NZ$', 'NZD'], ['HK$', 'HKD'], ['S$', 'SGD'], ['NT$', 'TWD'], ['Mex$', 'MXN'], ['CLP$', 'CLP'],
+	['COL$', 'COP'], ['ARS$', 'ARS'], ['$U', 'UYU'], ['R$', 'BRL'], ['S/.', 'PEN'], ['CHF', 'CHF'], ['AED', 'AED'], ['руб', 'RUB'], ['pуб', 'RUB'], ['₽', 'RUB'],
+	['zł', 'PLN'], ['TL', 'TRY'], ['₺', 'TRY'], ['₴', 'UAH'], ['₸', 'KZT'], ['₹', 'INR'], ['₩', 'KRW'], ['₪', 'ILS'], ['₡', 'CRC'], ['₫', 'VND'], ['฿', 'THB'],
+	['Rp', 'IDR'], ['RM', 'MYR'], ['SR', 'SAR'], ['KD', 'KWD'], ['QR', 'QAR'], ['Kč', 'CZK'], ['Ft', 'HUF'], ['lei', 'RON'], ['лв', 'BGN'], ['kn', 'HRK'],
+	['€', 'EUR'], ['£', 'GBP'], ['¥', null], ['kr', null], ['$', 'USD'], ['P', 'PHP'], ['R ', 'ZAR']];
+function currencyOfPrice(text, fallback) {
+	const s = String(text || '');
+	for (const [sym, code] of CUR_SYMBOLS) if (s.includes(sym)) return code || fallback;  // ¥ (CNY/JPY) и kr (NOK/SEK/DKK) — неоднозначны
+	return fallback;
+}
+const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+// Порядок день/месяц для «10/12/2026»: по всему файлу (где-то первое число > 12 — значит день первым)
+function dateOrder(values) {
+	let dmy = 0, mdy = 0;
+	for (const v of values) {
+		const m = String(v).match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})/);
+		if (!m) continue;
+		if (+m[1] > 12) dmy++; else if (+m[2] > 12) mdy++;
+	}
+	if (dmy || mdy) return dmy >= mdy ? 'dmy' : 'mdy';
+	return values.some(v => /^\d{1,2}\.\d{1,2}\.\d{4}/.test(String(v))) ? 'dmy' : 'mdy';
+}
+function parseSihCsv(text, { login, cur: fallbackCur }) {
+	const lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim());
+	const split = line => {
+		const out = []; let cur = '', q = false;
+		for (let i = 0; i < line.length; i++) {
+			const ch = line[i];
+			if (q) { if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"' && (line[i + 1] === ',' || i + 1 === line.length)) q = false; else cur += ch; }
+			else if (ch === '"' && cur === '') q = true;
+			else if (ch === ',') { out.push(cur.trim()); cur = ''; } else cur += ch;
+		}
+		out.push(cur.trim());
+		return out;
+	};
+	const raw = lines.slice(1).map(split);
+	const order = dateOrder(raw.map(c => c[3]));
+	const now = new Date(), rows = [], errors = [];
+	let year = now.getFullYear(), prevTs = null;   // для дат без года («12 Oct»): строки идут от новых к старым
+	raw.forEach((c, i) => {
+		const [itemName, gameName, , actedOn, display, cents, type, marketName, appId] = c;
+		if (type !== 'purchase' && type !== 'sale') return;                       // выставление/снятие лота — не сделка
+		if (appId ? appId !== '730' : !/counter-strike/i.test(gameName || '')) return;  // портфель — только CS2
+		const name = marketName || itemName;
+		const unit = Number(cents) / 100;
+		let ts = NaN;
+		const a = String(actedOn || '').trim();
+		let m;
+		if ((m = a.match(/^(\d{4})[./-](\d{1,2})[./-](\d{1,2})/))) ts = Date.UTC(+m[1], +m[2] - 1, +m[3], 12);
+		else if ((m = a.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})/))) ts = order === 'dmy' ? Date.UTC(+m[3], +m[2] - 1, +m[1], 12) : Date.UTC(+m[3], +m[1] - 1, +m[2], 12);
+		else if ((m = a.match(/^(\d{1,2})\s+([A-Za-z]{3})|^([A-Za-z]{3})\s+(\d{1,2})/))) {
+			const day = +(m[1] || m[4]), mon = MONTHS[(m[2] || m[3]).toLowerCase()];
+			if (mon != null) {
+				let t = Date.UTC(year, mon, day, 12);
+				if (t > now.getTime() + 86400e3 || (prevTs != null && t > prevTs + 86400e3)) { year--; t = Date.UTC(year, mon, day, 12); }
+				ts = t; prevTs = t;
+			}
+		}
+		const cur = currencyOfPrice(display, fallbackCur);
+		if (!name || !(unit > 0) || !Number.isFinite(ts) || !cur) { errors.push(i + 2); return; }
+		rows.push({ login, kind: type === 'purchase' ? 'buy' : 'sell', name, qty: 1, unit, cur, ts, src: 'sih' });
+	});
+	return { rows, errors };
+}
+
+module.exports = { Ledger, importMarketHistory, parseCsv, parseSihCsv, isSihCsv, currencyOfPrice };

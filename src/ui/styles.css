@@ -1256,3 +1256,9 @@ body.sm-money :is(#pnlTable, #pnlRecords, #ovAccounts) td.num, body.sm-money :is
 .star-btn { color: #f5c451; border-color: rgba(240, 180, 41, .5); background: rgba(240, 180, 41, .1); font-weight: 600; white-space: nowrap; }
 .star-btn:hover:not(:disabled) { background: rgba(240, 180, 41, .2) !important; border-color: #f5c451 !important; }
 .td-star span { text-align: left; flex: 1; color: var(--text); }
+/* сортировка колонок «Портфеля» */
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable:hover { color: var(--text); }
+th.sortable.on { color: var(--accent); }
+.sort-ar { font-style: normal; margin-left: 4px; font-size: 10px; opacity: .5; }
+th.sortable.on .sort-ar { opacity: 1; }

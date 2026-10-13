@@ -21,7 +21,7 @@ const SteamUser = require('steam-user');
 const { CasketSession, AccountStore, humanError } = require('./core/session');
 const prices = require('./core/prices');
 const { Portfolio } = require('./core/portfolio');
-const { Ledger, importMarketHistory, parseCsv } = require('./core/ledger');
+const { Ledger, importMarketHistory, parseCsv, parseSihCsv, isSihCsv } = require('./core/ledger');
 
 class Manager {
 	constructor({ dataDir, crypto: cryptoBox }) {
@@ -216,7 +216,9 @@ function start({ dataDir, secretBox, exportDir }) {
 	const token = crypto.randomBytes(24).toString('hex');
 
 	const app = express();
-	app.use(express.json({ limit: '1mb' }));
+	// импорт CSV (выгрузка SIH за годы — несколько МБ) — свой лимит, остальное — как раньше
+	const jsonSmall = express.json({ limit: '1mb' }), jsonBig = express.json({ limit: '64mb' });
+	app.use((req, res, next) => (req.path === '/api/pnl/csv' ? jsonBig : jsonSmall)(req, res, next));
 	app.use((req, res, next) => {
 		if (!req.path.startsWith('/api/')) return next();
 		if (req.get('x-token') === token) return next();
@@ -503,8 +505,24 @@ function start({ dataDir, secretBox, exportDir }) {
 	app.post('/api/pnl/update', handle(req => mgr.ledger.update(String(req.body.id), { unit: req.body.price, qty: req.body.qty, cur: req.body.currency ? String(req.body.currency).toUpperCase() : null })));
 	app.post('/api/pnl/delete', handle(req => ({ removed: mgr.ledger.remove((req.body.ids || []).map(String)) })));
 	app.post('/api/pnl/csv', handle(req => {
-		const { rows, errors } = parseCsv(req.body.text, { login: pick(req).login, cur: req.body.currency });
-		return { added: mgr.ledger.add(rows), rows: rows.length, errors: errors.slice(0, 20) };
+		const login = pick(req).login, text = String(req.body.text || '');
+		if (!isSihCsv(text)) {
+			const { rows, errors } = parseCsv(text, { login, cur: req.body.currency });
+			return { added: mgr.ledger.add(rows), rows: rows.length, errors: errors.slice(0, 20) };
+		}
+		// SIH: у строк нет id сделки — дубли (повторная загрузка файла, те же сделки из импорта ТП) отсекаем
+		// «по количеству»: такая же сделка (тип, предмет, цена, валюта, дата ±1 день) уже есть столько раз — пропускаем
+		const { rows, errors } = parseSihCsv(text, { login, cur: req.body.walletCurrency || req.body.currency });
+		const day = ts => Math.floor(ts / 86400e3);
+		const key = (r, d) => `${r.kind}|${r.name}|${Math.round(r.unit * 100)}|${r.cur}|${d}`;
+		const have = new Map();
+		for (const r of mgr.ledger.records([login])) for (let q = 0; q < (Number(r.qty) || 1); q++) { const k = key(r, day(r.ts)); have.set(k, (have.get(k) || 0) + 1); }
+		const fresh = [];
+		for (const r of rows) {
+			const d = day(r.ts), k = [key(r, d), key(r, d - 1), key(r, d + 1)].find(x => have.get(x) > 0);
+			if (k) have.set(k, have.get(k) - 1); else fresh.push(r);
+		}
+		return { added: mgr.ledger.add(fresh), rows: rows.length, duplicates: rows.length - fresh.length, format: 'sih', errors: errors.slice(0, 20) };
 	}));
 	app.post('/api/pnl/export', handle(async req => {
 		const pr = await mgr.pricing();
